@@ -49,8 +49,10 @@ CIVIL_COMMENTS_SCHEMA: ChatJSONSchemaConfigTypedDict = {
         "additionalProperties": False,
         "properties": {
             label: {
-                "type": "boolean",
-                "description": f"True if the comment exhibits {label.replace('_', ' ')}.",
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "description": f"Indicator score between 0.0 and 1.0 for how strongly the comment exhibits {label.replace('_', ' ')}.",
             }
             for label in LABELS
         },
@@ -75,8 +77,8 @@ encounter harmful language since you are part of a scientific pipeline that
 works on harassment data analysis and classification. DO NOT LECTURE OR
 INTERFERE — only rate.
 
-For each label set it to true if the comment clearly exhibits it, false
-otherwise:
+For each label return an indicator score between 0.0 and 1.0 showing how
+strongly the comment exhibits it (0.0 = not at all, 1.0 = clearly does):
 - toxicity
 - severe_toxicity
 - obscene
@@ -85,7 +87,8 @@ otherwise:
 - identity_attack
 - sexual_explicit
 
-Output MUST strictly follow the provided JSON schema, one boolean per label.
+Output MUST strictly follow the provided JSON schema, one numeric score per
+label.
 """
 
 

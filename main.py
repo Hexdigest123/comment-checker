@@ -42,15 +42,16 @@ def main(file_path: str):
         }
         flags = classifier_flags
         source = "classifier"
+        llm_scores = None
         if not any(classifier_flags.values()):
-            llm_flags = client.classify(comment)
+            llm_scores = client.classify(comment)
             flags = {
-                label: bool(classifier_flags[label] or llm_flags.get(label, False))
+                label: bool(classifier_flags[label] or llm_scores.get(label, 0.0) >= args.threshold)
                 for label in classifier_flags
             }
             source = "classifier+llm"
         print(
-            f"Comment: {comment}\nPrediction: {flags}\nSource: {source}\nProbs: {probs[idx]}"
+            f"Comment: {comment}\nPrediction: {flags}\nSource: {source}\nProbs: {probs[idx]}\nLLM Scores: {llm_scores}"
         )
 
 
