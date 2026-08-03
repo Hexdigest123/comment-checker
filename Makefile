@@ -1,8 +1,18 @@
-.PHONY: train
+PYTHON ?= python3
+VENV ?= .venv
+VENV_PYTHON := $(VENV)/bin/python
 
-all:
-	@echo "TEST"
+.PHONY: all setup install train
 
-train:
-	@echo "start re-training the model"
-	.venv/bin/python main.py --train --train-rows 1804874 --val-rows 97320 --bf16
+all: setup
+
+$(VENV_PYTHON):
+	$(PYTHON) -m venv $(VENV)
+
+install: $(VENV_PYTHON) requirements.txt
+	$(VENV_PYTHON) -m pip install -r requirements.txt
+
+setup: install
+
+train: setup
+	$(VENV_PYTHON) main.py --train --train-rows 1804874 --val-rows 97320 --bf16
