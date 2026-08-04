@@ -3,8 +3,10 @@
 from utils import csv
 import os
 import argparse
+import json
 
 from utils.llm import LLMClient
+from utils.consts import LLM_LABELS
 from utils.train import (
     Classifier,
     MODEL_ID,
@@ -27,32 +29,53 @@ def main(file_path: str):
     client = LLMClient()
 
     classifier = Classifier(model_id=args.model)
-    data = data.head(args.max)
+    data = data.iloc[args.offset : args.offset + args.max]
 
     translated_comments = []
     for idx, row in data.iterrows():
-        translated_comments.append([client.translate([str(row["Comment"])])])
+        translated_comments.append(client.translate(str(row["Comment"])))
 
     probs = classifier.predict(translated_comments)
 
-    for idx in range(len(translated_comments)):
-        comment = translated_comments[idx]
-        classifier_flags = {
-            label: prob >= args.threshold for label, prob in probs[idx].items()
-        }
-        flags = classifier_flags
-        source = "classifier"
-        llm_scores = None
-        if not any(classifier_flags.values()):
+    output_mode = "a" if args.offset else "w"
+    output = open(args.output, output_mode, encoding="utf-8") if args.output else None
+    try:
+        for idx, comment in enumerate(translated_comments):
+            row = data.iloc[idx]
+            classifier_flags = {
+                label: prob >= args.threshold for label, prob in probs[idx].items()
+            }
             llm_scores = client.classify(comment)
             flags = {
-                label: bool(classifier_flags[label] or llm_scores.get(label, 0.0) >= args.threshold)
-                for label in classifier_flags
+                label: bool(
+                    classifier_flags.get(label, False)
+                    or llm_scores.get(label, 0.0) >= args.threshold
+                )
+                for label in LLM_LABELS
             }
-            source = "classifier+llm"
-        print(
-            f"Comment: {comment}\nPrediction: {flags}\nSource: {source}\nProbs: {probs[idx]}\nLLM Scores: {llm_scores}"
-        )
+            result = {
+                "row": args.offset + idx + 1,
+                "comment_id": str(row.get("Comment ID", "")),
+                "evaluation_group": str(row.get("Evaluation Group", "")),
+                "expected_relevant": str(row.get("Expected Relevant", "")),
+                "expected_discrimination": str(
+                    row.get("Expected Discrimination", "")
+                ),
+                "original_comment": str(row["Comment"]),
+                "translated_comment": comment,
+                "prediction": flags,
+                "classifier_probs": probs[idx],
+                "llm_scores": llm_scores,
+            }
+            if output:
+                output.write(json.dumps(result, ensure_ascii=False) + "\n")
+                output.flush()
+            print(
+                f"Comment: {comment}\nPrediction: {flags}\nSource: classifier+llm\nProbs: {probs[idx]}\nLLM Scores: {llm_scores}"
+            )
+    finally:
+        if output:
+            output.close()
 
 
 if __name__ == "__main__":
@@ -71,10 +94,21 @@ if __name__ == "__main__":
         help="Maximum number of comments to classify (default: 20)",
     )
     parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of comments to skip before classification (default: 0)",
+    )
+    parser.add_argument(
         "--threshold",
         type=float,
         default=0.3,
         help="Flagging probability threshold for each label (default: 0.3)",
+    )
+    parser.add_argument(
+        "--output",
+        metavar="FILE",
+        help="Write machine-readable prediction results as JSONL",
     )
     parser.add_argument(
         "--train",
