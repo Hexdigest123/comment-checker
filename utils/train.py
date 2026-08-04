@@ -138,7 +138,6 @@ class Classifier:
 
         Returns:
             list of dicts mapping each label to its probability in [0, 1].
-            A label is flagged when its probability is >= 0.5.
         """
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         tokenizer = AutoTokenizer.from_pretrained(self.output_dir)
@@ -147,11 +146,13 @@ class Classifier:
         )
         model.eval()
 
+        comments = [str(comment) for comment in comments]
         results = []
         with torch.no_grad():
-            for comment in comments:
+            for start in range(0, len(comments), self.config["batch_size"]):
+                batch = comments[start : start + self.config["batch_size"]]
                 inputs = tokenizer(
-                    str(comment),
+                    batch,
                     truncation=True,
                     padding="max_length",
                     max_length=self.config["max_len"],
@@ -161,8 +162,11 @@ class Classifier:
                     input_ids=inputs["input_ids"],
                     attention_mask=inputs["attention_mask"],
                 ).logits
-                probs = torch.sigmoid(logits).squeeze().cpu().tolist()
-                results.append({label: prob for label, prob in zip(LABELS, probs)})
+                batch_probs = torch.sigmoid(logits).cpu().tolist()
+                results.extend(
+                    {label: prob for label, prob in zip(LABELS, row_probs)}
+                    for row_probs in batch_probs
+                )
         return results
 
     def __evaluate(self, model, loader, loss_fn, device):
