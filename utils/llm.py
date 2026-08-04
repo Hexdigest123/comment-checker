@@ -2,8 +2,14 @@ import json
 import os
 from typing import Any, Dict, Text
 from openrouter import OpenRouter
+from openrouter.utils.retries import BackoffStrategy, RetryConfig
 from utils import logger
 from utils.consts import CIVIL_FMT, CIVIL_PROMPT
+
+REQUEST_TIMEOUT_MS = 120000
+RETRY_CONFIG = RetryConfig(
+    "backoff", BackoffStrategy(500, 10000, 1.5, 120000), True
+)
 
 
 class LLMClient:
@@ -19,7 +25,11 @@ class LLMClient:
     def translate(self, comment):
         if isinstance(comment, list):
             comment = comment[0] if comment else ""
-        with OpenRouter(self.api_key) as open_router:
+        with OpenRouter(
+            self.api_key,
+            timeout_ms=REQUEST_TIMEOUT_MS,
+            retry_config=RETRY_CONFIG,
+        ) as open_router:
             res = open_router.chat.send(
                 model=self.model,
                 messages=[
@@ -39,7 +49,11 @@ class LLMClient:
     def classify(self, comment):
         if isinstance(comment, list):
             comment = comment[0] if comment else ""
-        with OpenRouter(self.api_key) as open_router:
+        with OpenRouter(
+            self.api_key,
+            timeout_ms=REQUEST_TIMEOUT_MS,
+            retry_config=RETRY_CONFIG,
+        ) as open_router:
             res = open_router.chat.send(
                 model=self.model,
                 messages=[
