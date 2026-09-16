@@ -3,3 +3,4 @@ mistralai
 pandas
 torch
 transformers
+typesafe-sdk
