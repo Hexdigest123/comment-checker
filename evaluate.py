@@ -64,7 +64,7 @@ def evaluate(path, backend):
         "detection_rate": round(detection_rate, 4),
     }
 
-    if backend == "typesafe":
+    if backend in ("typesafe", "combined"):
         correct = 0
         mappable = 0
         cat_dist = Counter()
@@ -103,6 +103,10 @@ def evaluate(path, backend):
         summary["predicted_category_dist"] = dict(cat_dist)
         summary["expected_category_dist"] = dict(gt_dist)
         summary["mismatch_examples"] = mismatch_examples[:15]
+        if backend == "combined":
+            flagged_by = Counter(r.get("flagged_by") for r in rows)
+            summary["flagged_by_typesafe"] = flagged_by.get("typesafe", 0)
+            summary["flagged_by_mistral_fallback"] = flagged_by.get("mistral_fallback", 0)
     else:
         avg_harmful = [r.get("harmful") or 0.0 for r in rows]
         summary["avg_harmful"] = round(sum(avg_harmful) / n, 4)
@@ -125,6 +129,7 @@ if __name__ == "__main__":
     import sys
 
     ts = evaluate("results_typesafe.jsonl", "typesafe")
+    cb = evaluate("results_combined.jsonl", "combined")
     ms = evaluate("results_mistral.jsonl", "mistral")
     print("=" * 70)
     print("TYPESAFE (Jev) SUMMARY")
@@ -136,6 +141,16 @@ if __name__ == "__main__":
                 print(f"    - gt={m['gt']!r} expected={m['expected']} predicted={m['predicted']} "
                       f"harmful={m['harmful']} conf={m['confidence']}")
                 print(f"      {m['comment']}")
+        else:
+            print(f"  {k}: {v}")
+
+    print()
+    print("=" * 70)
+    print("COMBINED (TypeSafe Jev + Mistral in-context fallback) SUMMARY")
+    print("=" * 70)
+    for k, v in cb.items():
+        if k == "mismatch_examples":
+            print(f"  mismatch_examples: {len(v)} shown (first 15)")
         else:
             print(f"  {k}: {v}")
 

@@ -19,6 +19,11 @@ def build_client(backend: str, context: str):
         return TypeSafeLLMClient(context=context)
     if backend == "mistral":
         return LLMClient(context=context)
+    if backend == "combined":
+        return (
+            TypeSafeLLMClient(context=context),
+            LLMClient(context=context),
+        )
     raise ValueError(f"Unknown backend: {backend}")
 
 
@@ -60,6 +65,39 @@ def classify_typesafe(client, comment: str, threshold: float):
     }
 
 
+def classify_combined(clients, comment: str, threshold: float):
+    """Run TypeSafe Jev for classification, then the Mistral in-context
+    fallback only for the comments Jev did not flag.
+
+    Jev provides the category, severity and confidence. The Mistral fallback
+    provides the detection for short, coded, context-dependent praise that Jev
+    is too conservative to flag on its own.
+    """
+    typesafe_client, mistral_client = clients
+    scores = typesafe_client.classify(comment)
+    harmful = float(scores.get("harmful", 0.0))
+    flagged = harmful >= threshold
+    flagged_by = "typesafe"
+
+    if not flagged:
+        second_opinion = mistral_client.check_with_context(comment)
+        if second_opinion:
+            flagged = True
+            harmful = 1.0
+            flagged_by = "mistral_fallback"
+
+    return {
+        "backend": "combined",
+        "scores": scores,
+        "flagged": flagged,
+        "flagged_by": flagged_by,
+        "category": scores.get("category"),
+        "confidence": scores.get("confidence"),
+        "severity": scores.get("severity"),
+        "harmful": harmful,
+    }
+
+
 def main(file_path: str):
     data = csv.CSVReader(os.path.join(os.getcwd(), file_path), ",").df
     client = build_client(args.backend, args.context)
@@ -75,6 +113,8 @@ def main(file_path: str):
             comment = str(row["Comment"])
             if args.backend == "typesafe":
                 result = classify_typesafe(client, comment, args.threshold)
+            elif args.backend == "combined":
+                result = classify_combined(client, comment, args.threshold)
             else:
                 result = classify_mistral(client, comment, args.threshold)
 
@@ -125,9 +165,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--backend",
-        choices=["typesafe", "mistral"],
+        choices=["typesafe", "mistral", "combined"],
         default="typesafe",
-        help="Classification backend: typesafe (TypeSafe Jev, default) or mistral (existing pipeline)",
+        help="Classification backend: typesafe (TypeSafe Jev, default), mistral (existing pipeline), or combined (Jev for classification + Mistral in-context fallback for the borderline cases Jev misses)",
     )
     parser.add_argument(
         "--out",

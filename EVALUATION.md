@@ -13,19 +13,21 @@ Branch: `vibe/typesafe-ai-9a50fa`
 
 - **TypeSafe (Jev, `jev-latest` → `jev-1.13.0`)** — new implementation in `utils/typesafe.py`. A single System One call sends the comment as `state` and three typed questions: a `Noul` ("is this harmful"), a `Choice` (9 hate-speech categories), and a `Score` (0–3 severity). No LLM fallback, no text to parse. Flags when `harmful >= threshold`.
 - **Mistral (existing, fallback now fixed)** — `utils/llm.py`. First pass: `mistral-moderation-2603` category scores, flag any ≥ 0.3. If none flagged, second pass: `mistral-small-latest` chat completion answering YES/NO **judging the comment in the given context, not in isolation** — so innocuous-looking praise of a hateful act (e.g. "Ehrenmann" / "he did nothing wrong" reacting to a "Jews banned" sign) counts as hate speech. Returns scores only, no category.
+- **Combined** — `--backend combined`. TypeSafe Jev classifies every comment (category + severity + confidence). For the comments Jev does **not** flag (harmful < threshold), the fixed Mistral in-context fallback gets a second look. This keeps Jev's rich typed output while recovering the short, coded, context-dependent praise that Jev is too conservative to flag on its own.
 
 ## Results (391 comments)
 
-| Metric | TypeSafe (Jev) | Mistral (existing) |
-|---|---|---|
-| Flagged / detected | 304 | 388 |
-| **Detection rate (recall)** | **77.75%** | **99.23%** |
-| Flagged by 2nd-pass fallback | n/a (no fallback) | 270 of 391 (69%) |
-| Moderation-only flag rate (`hate_and_discrimination` ≥ 0.3) | n/a | 27.4% |
-| Category output | yes (9 categories) | no |
-| Severity output | yes (0–3) | no |
-| Calibrated confidence | yes | no |
-| Avg harmful probability | 0.546 | 0.691 |
+| Metric | TypeSafe (Jev) | Mistral (existing) | Combined (Jev + fallback) |
+|---|---|---|---|
+| Flagged / detected | 304 | 388 | 389 |
+| **Detection rate (recall)** | **77.75%** | **99.23%** | **99.49%** |
+| Flagged by 2nd-pass fallback | n/a (no fallback) | 270 of 391 (69%) | 83 of 391 (21%, only on Jev misses) |
+| Moderation-only flag rate (`hate_and_discrimination` ≥ 0.3) | n/a | 27.4% | n/a |
+| Category output | yes (9 categories) | no | yes (9 categories) |
+| Category exact-match vs ground truth | 59.1% | n/a | 59.6% |
+| Severity output | yes (0–3) | no | yes (0–3) |
+| Calibrated confidence | yes | no | yes |
+| Avg harmful probability | 0.546 | 0.691 | 0.721 |
 
 ### TypeSafe category accuracy
 - Category accuracy vs mapped ground truth: **59.1%** (top-1 exact match against the mapped legal category).
@@ -37,5 +39,5 @@ Branch: `vibe/typesafe-ai-9a50fa`
 1. **After fixing the Mistral fallback to judge comments in context, the existing pipeline reaches 99.23% recall** (388/391) — it was previously 75.45% because its YES/NO fallback judged comments in isolation, so short innocuous-looking praise of a hateful act ("Ehrenmann", "he did nothing wrong" reacting to a "Jews banned" sign) was read as non-hateful. The fallback prompt now explicitly tells the model that endorsing a hateful act described in the context is hate speech even when the comment's words are innocuous. The 3 remaining misses are extremely indirect (`Geil nur 1200?`, `Bundes Republik Israel`, `Kann man spenden?`).
 2. **TypeSafe Jev (77.75%) is more conservative** on short, context-dependent borderline comments — e.g. it returns `harmful=0.11` for "Bester Mann" and 0.26 for "Sollten überall Hausverbot bekommen" even with the context in `state`. It still catches clear in-context endorsements ("Bro hat nichts falsch gemacht" → 0.79) but under-flags the vaguest single-word praise. This is the cost of a single decision pass with no textual reasoning fallback.
 3. **TypeSafe returns richer, machine-native output**: a discrete category (59% exact match vs the legal taxonomy), a 0–3 severity score, and a calibrated confidence — none of which the Mistral moderation + YES/NO pipeline provides.
-4. **Trade-off**: Mistral's chat fallback is the better *detector* on this hard, context-dependent set (99.2% vs 77.8%) because it can reason about indirect/endorsing language. TypeSafe is the better *classifier* (category + severity + confidence, no text to parse, cheaper/faster) but is currently too conservative on the vaguest coded praise to serve as the sole detector here. A strong production path could use Mistral's in-context check for detection and TypeSafe's typed questions for the category/severity/confidence layer.
-5. Per-comment outputs: `results_typesafe.jsonl`, `results_mistral.jsonl`. Re-run with `python3 evaluate.py`.
+4. **Combined is the best of both**: Jev classifies everything (category + severity + confidence), and the fixed Mistral in-context fallback only runs on the 83 comments Jev under-flagged. Detection reaches **99.49%** (389/391), slightly above Mistral alone (99.23%), while keeping Jev's typed output. The combined run calls the fallback on far fewer comments than the Mistral-only pipeline (83 vs 270), so it is cheaper for the same coverage. The 2 remaining misses are extremely indirect (`Bundes Republik Israel`, `Kann man spenden?`).
+5. Per-comment outputs: `results_typesafe.jsonl`, `results_mistral.jsonl`, `results_combined.jsonl`. Re-run with `python3 evaluate.py`.
