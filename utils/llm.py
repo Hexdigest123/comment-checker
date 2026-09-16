@@ -46,27 +46,39 @@ class LLMClient:
             True if the comment contains hate speech, False otherwise
         """
         prompt = f"""
-You are a hate speech detection assistant. Given the following context and comment,
-determine if the comment contains hate speech, discrimination, or harmful language.
+You are a hate speech detection assistant. Judge the comment STRICTLY within the
+given context. The context is the situation the comment is reacting to; the
+comment's meaning depends on it.
 
 Context: {self.context}
 
 Comment: "{comment}"
 
-Analyze the comment in the context of the situation described. Consider:
-- Does the comment express prejudice, hostility, or discrimination?
-- Does it support, justify, or glorify hateful actions?
-- Does it use coded language, dog whistles, or indirect hate speech?
-- Would a reasonable person interpret this as hateful in this context?
+A comment is hate speech in this context if, read as a reaction to the situation
+above, it does ANY of the following:
+- Approves, praises, justifies, glorifies, or calls for imitation of a hateful
+  or illegal act against a protected group (e.g. banning or expelling people
+  because of their ethnicity or religion). This is hate speech EVEN IF the
+  comment's words alone are innocuous — a phrase like "man of honor", "best man",
+  "he did nothing wrong", or a single praising emoji can be hate speech when it
+  endorses a hateful act in this context.
+- Expresses prejudice, hostility, dehumanization, or discrimination against a
+  protected group, directly or by coded language / dog whistles.
+- Calls for, threatens, or incites violence or further exclusion of a group.
 
-Respond with ONLY the word "YES" if the comment contains hate speech, or "NO" if it does not.
-Do not add any explanation, justification, or additional text. Just "YES" or "NO".
+Do not judge the comment in isolation. Do not require the comment to contain
+slurs or explicit hateful words on its own. The question is whether, given the
+context, a reasonable person would understand this comment as hateful.
+
+Respond with ONLY the word "YES" if the comment is hate speech in this context,
+or "NO" if it is not. Do not add any explanation, justification, or additional
+text. Just "YES" or "NO".
 """
         
         response = self.client.chat.complete(
             model="mistral-small-latest",
             messages=[
-                {"role": "system", "content": "You are a hate speech detection assistant. Respond ONLY with YES or NO."},
+                {"role": "system", "content": "You are a hate speech detection assistant. Judge the comment in the given context, not in isolation. A comment that endorses a hateful act described in the context is hate speech even if its words are innocuous. Respond ONLY with YES or NO."},
                 {"role": "user", "content": prompt}
             ],
             stream=False,
