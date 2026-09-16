@@ -52,7 +52,10 @@ def load(path):
 
 
 def evaluate(path, backend):
-    rows = load(path)
+    try:
+        rows = load(path)
+    except FileNotFoundError:
+        return None
     n = len(rows)
     detected = sum(1 for r in rows if r.get("flagged"))
     detection_rate = detected / n if n else 0.0
@@ -110,12 +113,9 @@ def evaluate(path, backend):
     else:
         avg_harmful = [r.get("harmful") or 0.0 for r in rows]
         summary["avg_harmful"] = round(sum(avg_harmful) / n, 4)
-        flagged_by_fallback = sum(
-            1 for r in rows if (r.get("flags") or {}).get("hate_speech") and not any(
-                v for k, v in (r.get("flags") or {}).items() if k != "hate_speech"
-            )
-        )
-        summary["flagged_by_context_fallback"] = flagged_by_fallback
+        flagged_by = Counter(r.get("flagged_by") for r in rows)
+        summary["flagged_by_mistral_moderation"] = flagged_by.get("mistral_moderation", 0)
+        summary["flagged_by_context_fallback"] = flagged_by.get("mistral_fallback", 0)
         scores_keys = ["hate_and_discrimination", "violence_and_threats", "criminal", "dangerous"]
         summary["moderation_flag_rate"] = {}
         for k in scores_keys:
@@ -128,35 +128,29 @@ def evaluate(path, backend):
 if __name__ == "__main__":
     import sys
 
+    def print_summary(title, summary):
+        if summary is None:
+            return
+        print("=" * 70)
+        print(title)
+        print("=" * 70)
+        for k, v in summary.items():
+            if k == "mismatch_examples":
+                print(f"  mismatch_examples: {len(v)} shown (first 15)")
+                for m in v[:8]:
+                    print(f"    - gt={m['gt']!r} expected={m['expected']} predicted={m['predicted']} "
+                          f"harmful={m['harmful']} conf={m['confidence']}")
+                    print(f"      {m['comment']}")
+            else:
+                print(f"  {k}: {v}")
+        print()
+
     ts = evaluate("results_typesafe.jsonl", "typesafe")
+    mmod = evaluate("results_mistral_moderation.jsonl", "mistral_moderation_only")
     cb = evaluate("results_combined.jsonl", "combined")
     ms = evaluate("results_mistral.jsonl", "mistral")
-    print("=" * 70)
-    print("TYPESAFE (Jev) SUMMARY")
-    print("=" * 70)
-    for k, v in ts.items():
-        if k == "mismatch_examples":
-            print(f"  mismatch_examples: {len(v)} shown (first 15)")
-            for m in v[:8]:
-                print(f"    - gt={m['gt']!r} expected={m['expected']} predicted={m['predicted']} "
-                      f"harmful={m['harmful']} conf={m['confidence']}")
-                print(f"      {m['comment']}")
-        else:
-            print(f"  {k}: {v}")
 
-    print()
-    print("=" * 70)
-    print("COMBINED (TypeSafe Jev + Mistral in-context fallback) SUMMARY")
-    print("=" * 70)
-    for k, v in cb.items():
-        if k == "mismatch_examples":
-            print(f"  mismatch_examples: {len(v)} shown (first 15)")
-        else:
-            print(f"  {k}: {v}")
-
-    print()
-    print("=" * 70)
-    print("MISTRAL (Moderation 2 + context fallback) SUMMARY")
-    print("=" * 70)
-    for k, v in ms.items():
-        print(f"  {k}: {v}")
+    print_summary("TYPESAFE (Jev) SUMMARY", ts)
+    print_summary("MISTRAL MODERATION 2 ONLY (no fallback) SUMMARY", mmod)
+    print_summary("COMBINED (TypeSafe Jev + Mistral in-context fallback) SUMMARY", cb)
+    print_summary("MISTRAL (Moderation 2 + context fallback) SUMMARY", ms)
