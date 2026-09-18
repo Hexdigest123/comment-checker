@@ -11,7 +11,7 @@ from sqlalchemy import select, func, and_, or_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..models import Comment, CommentStatus, Classification, CategoryType, SeverityLevel, BackendType
+from ..db.models import Comment, CommentStatus, Classification, ClassificationCategory, ClassificationSeverity, ClassificationBackend
 from ..schemas import (
     DashboardStatsResponse,
     DashboardSummaryResponse,
@@ -120,7 +120,7 @@ async def get_category_distribution(
     
     distribution = []
     
-    for category in CategoryType:
+    for category in ClassificationCategory:
         count_result = await db.execute(
             select(func.count())
             .where(
@@ -137,15 +137,14 @@ async def get_category_distribution(
             
             # Get label
             category_labels = {
-                CategoryType.NONE: "No harmful content",
-                CategoryType.INCITEMENT_TO_CRIME: "Incitement to crime",
-                CategoryType.APPROVAL_OF_ARBITRARY_ACTION: "Approval of arbitrary action",
-                CategoryType.INCITEMENT_TO_HATRED: "Incitement to hatred",
-                CategoryType.INSULT: "Insult",
-                CategoryType.THREAT: "Threat",
-                CategoryType.GLORIFICATION_OF_NAZISM: "Glorification of Nazism",
-                CategoryType.RELIGIOUS_DEFAMATION: "Religious defamation",
-                CategoryType.OTHER: "Other",
+                ClassificationCategory.HATE: "Hate",
+                ClassificationCategory.HARASSMENT: "Harassment",
+                ClassificationCategory.VIOLENCE: "Violence",
+                ClassificationCategory.SELF_HARM: "Self Harm",
+                ClassificationCategory.SEXUAL: "Sexual",
+                ClassificationCategory.SPAM: "Spam",
+                ClassificationCategory.ILLEGAL: "Illegal",
+                ClassificationCategory.SAFE: "Safe",
             }
             label = category_labels.get(category, category.value)
             
@@ -221,7 +220,7 @@ async def get_backend_distribution(
     
     distribution = {}
     
-    for backend in BackendType:
+    for backend in ClassificationBackend:
         filter_cond = and_(
             Classification.backend == backend,
             date_filter if date_filter else True,

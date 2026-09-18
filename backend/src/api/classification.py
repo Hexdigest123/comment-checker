@@ -13,7 +13,7 @@ from sqlalchemy import and_, or_
 
 from ..config import get_settings
 from ..db.session import get_async_db
-from ..models import Classification, Comment, User
+from ..db.models import Classification, Comment, User
 from ..schemas import (
     ClassificationResponse,
     ClassificationListResponse,
@@ -30,7 +30,7 @@ from ..services.classification import (
     get_classification_stats,
 )
 from ..services.comment import get_comment_by_id, update_comment_status
-from ..models import CommentStatus
+from ..db.models import CommentStatus
 from ..api.auth import get_current_user, get_current_active_user, get_current_admin_user
 
 # Get settings
@@ -68,8 +68,8 @@ async def list_classifications(
     # Backend filter
     if params.backend:
         try:
-            from ..models import BackendType
-            backend_enum = BackendType(params.backend.lower())
+            from ..db.models import ClassificationBackend
+            backend_enum = ClassificationBackend(params.backend.lower())
             filter_conditions.append(Classification.backend == backend_enum)
         except ValueError:
             pass
@@ -81,8 +81,8 @@ async def list_classifications(
     # Category filter
     if params.category:
         try:
-            from ..models import CategoryType
-            category_enum = CategoryType(params.category.lower())
+            from ..db.models import ClassificationCategory
+            category_enum = ClassificationCategory(params.category.lower())
             filter_conditions.append(Classification.category == category_enum)
         except ValueError:
             pass

@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..models import User
+from ..db.models import User
 from ..services.auth import get_password_hash
 from ..services.user import get_user_by_email, create_user
 

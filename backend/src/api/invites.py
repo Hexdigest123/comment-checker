@@ -14,7 +14,7 @@ from sqlalchemy import and_
 
 from ..config import get_settings
 from ..db.session import get_async_db
-from ..models import User, InviteToken, TokenStatus
+from ..db.models import User, InviteToken, TokenStatus
 from ..schemas import (
     InviteTokenCreate,
     InviteTokenResponse,

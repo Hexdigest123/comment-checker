@@ -16,7 +16,7 @@ from sqlalchemy import or_, and_, desc, asc
 
 from ..config import get_settings
 from ..db.session import get_async_db
-from ..models import Comment, CommentStatus, CommentPriority, User
+from ..db.models import Comment, CommentStatus, CommentPriority, User
 from ..schemas import (
     CommentCreate,
     CommentUpdate,

@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..models import RefreshToken, InviteToken, PasswordResetToken, TokenStatus, User
+from ..db.models import RefreshToken, InviteToken, PasswordResetToken, TokenStatus, User
 from ..services.auth import get_password_hash
 
 # Get settings

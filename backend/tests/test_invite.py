@@ -3,8 +3,8 @@
 import pytest
 from datetime import datetime, timedelta
 
-from src.models import User, InviteToken
-from src.utils.security import get_password_hash
+from src.db.models import User, InviteToken
+from src.services.auth import get_password_hash
 
 
 class TestInviteCreate:
@@ -240,7 +240,7 @@ class TestPasswordReset:
     async def test_confirm_password_reset(self, client, test_user: User, db_session):
         """Test confirming a password reset."""
         # Create a password reset token
-        from src.models import PasswordResetToken
+        from src.db.models import PasswordResetToken
         token = PasswordResetToken(
             id='50000000-0000-0000-0000-000000000001',
             token='reset-token',
@@ -280,7 +280,7 @@ class TestPasswordReset:
     async def test_confirm_password_reset_used_token(self, client, db_session, test_user: User):
         """Test confirming password reset with used token."""
         # Create a used password reset token
-        from src.models import PasswordResetToken
+        from src.db.models import PasswordResetToken
         token = PasswordResetToken(
             id='50000000-0000-0000-0000-000000000002',
             token='used-reset-token',
@@ -306,7 +306,7 @@ class TestPasswordReset:
     async def test_confirm_password_reset_expired_token(self, client, db_session, test_user: User):
         """Test confirming password reset with expired token."""
         # Create an expired password reset token
-        from src.models import PasswordResetToken
+        from src.db.models import PasswordResetToken
         token = PasswordResetToken(
             id='50000000-0000-0000-0000-000000000003',
             token='expired-reset-token',

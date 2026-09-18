@@ -29,8 +29,8 @@ os.environ['DEBUG'] = 'true'
 from src.main import app
 from src.db.base import Base
 from src.db.session import get_db
-from src.models import User, RefreshToken, InviteToken, Comment, Classification
-from src.utils.security import get_password_hash
+from src.db.models import User, RefreshToken, InviteToken, Comment, Classification
+from src.services.auth import get_password_hash
 
 # Create test database engine
 test_engine = create_async_engine(

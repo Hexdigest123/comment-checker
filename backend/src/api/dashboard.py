@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..db.session import get_async_db
-from ..models import User
+from ..db.models import User
 from ..schemas import (
     DashboardStatsResponse,
     DashboardSummaryResponse,
