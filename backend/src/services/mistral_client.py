@@ -1,24 +1,39 @@
+"""
+Mistral client for Moderation 2 API
+Adapted from existing utils/llm.py
+"""
+
 import os
-from typing import Optional, Text
+from typing import Text, Any, Dict
+
 from mistralai.client import Mistral
-from utils import logger
+
+from ..config import get_settings
+
+# Get settings
+settings = get_settings()
 
 
 class LLMClient:
+    """
+    Client for Mistral Moderation 2 API with fallback in-context check.
+    """
+
     def __init__(
         self,
         model: Text = "mistral-moderation-2603",
-        context: Optional[str] = None,
+        context: Text = None,
     ):
         self.model = model
-        self.context = context
-        self.api_key = os.environ.get("MISTRAL_API_KEY") or ""
+        self.context = context or ""
+        self.api_key = settings.mistral_api_key or os.environ.get("MISTRAL_API_KEY")
         if not self.api_key:
-            logger.fatal("MISTRAL_API_KEY environment variable is required but not set!")
+            raise ValueError("Mistral API Key not found. Set MISTRAL_API_KEY in environment.")
         self.client = Mistral(api_key=self.api_key)
 
-    def classify(self, comment: Text) -> dict:
-        """Classify comment using Mistral Moderation 2 API.
+    def classify(self, comment: Text) -> Dict[str, float]:
+        """
+        Classify comment using Mistral Moderation 2 API.
         
         Returns raw category scores from Mistral Moderation 2.
         """
@@ -30,11 +45,14 @@ class LLMClient:
         result = response.results[0]
         category_scores = result.category_scores
         
-        print(f"Mistral Moderation 2 scores: {category_scores}")
-        return category_scores
+        # Convert to float values
+        scores = {label: float(score) for label, score in category_scores.items()}
+        
+        return scores
 
     def check_with_context(self, comment: Text) -> bool:
-        """Use a general-purpose Mistral model with context to detect hate speech.
+        """
+        Use a general-purpose Mistral model with context to detect hate speech.
         
         This is the second-stage check for comments that Mistral Moderation 2
         did not flag but may contain subtle hate speech.
@@ -59,7 +77,7 @@ above, it does ANY of the following:
 - Approves, praises, justifies, glorifies, or calls for imitation of a hateful
   or illegal act against a protected group (e.g. banning or expelling people
   because of their ethnicity or religion). This is hate speech EVEN IF the
-  comment's words alone are innocuous — a phrase like "man of honor", "best man",
+  comment's words alone are innocuous - a phrase like "man of honor", "best man",
   "he did nothing wrong", or a single praising emoji can be hate speech when it
   endorses a hateful act in this context.
 - Expresses prejudice, hostility, dehumanization, or discrimination against a
@@ -78,6 +96,10 @@ text. Just "YES" or "NO".
         response = self.client.chat.complete(
             model="mistral-small-latest",
             messages=[
+                {
+                    "role": "system",
+                    "content": "You are a hate speech detection assistant. Judge the comment in the given context, not in isolation. A comment that endorses a hateful act described in the context is hate speech even if its words are innocuous. Respond ONLY with YES or NO."
+                },
                 {"role": "user", "content": prompt}
             ],
             stream=False,
@@ -87,5 +109,4 @@ text. Just "YES" or "NO".
         result = response.choices[0].message.content.strip().upper()
         is_hate = result == "YES"
         
-        print(f"Context-aware check: {comment} -> {result}")
         return is_hate

@@ -1,0 +1,274 @@
+/* Global styles for Comment Checker */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
+}
+
+/* Card styles */
+.card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-200;
+}
+
+.card-hover {
+  @apply transition-shadow hover:shadow-md;
+}
+
+/* Button styles */
+.btn {
+  @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200;
+}
+
+.btn-primary {
+  @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+}
+
+.btn-secondary {
+  @apply btn bg-secondary-100 text-secondary-700 hover:bg-secondary-200 focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2;
+}
+
+.btn-success {
+  @apply btn bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2;
+}
+
+.btn-danger {
+  @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2;
+}
+
+.btn-outline {
+  @apply btn border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+}
+
+.btn-ghost {
+  @apply btn text-gray-600 hover:bg-gray-100 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+}
+
+.btn-sm {
+  @apply px-3 py-1.5 text-xs;
+}
+
+.btn-lg {
+  @apply px-6 py-3 text-base;
+}
+
+/* Form input styles */
+.input {
+  @apply block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white shadow-sm placeholder-gray-400;
+  @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
+  @apply disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed;
+}
+
+.input-error {
+  @apply border-red-500 focus:ring-red-500 focus:border-red-500;
+}
+
+.input-success {
+  @apply border-green-500 focus:ring-green-500 focus:border-green-500;
+}
+
+/* Label styles */
+.label {
+  @apply block text-sm font-medium text-gray-700 mb-1;
+}
+
+/* Badge styles */
+.badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.badge-primary {
+  @apply badge bg-primary-100 text-primary-800;
+}
+
+.badge-secondary {
+  @apply badge bg-secondary-100 text-secondary-800;
+}
+
+.badge-success {
+  @apply badge bg-green-100 text-green-800;
+}
+
+.badge-warning {
+  @apply badge bg-yellow-100 text-yellow-800;
+}
+
+.badge-danger {
+  @apply badge bg-red-100 text-red-800;
+}
+
+.badge-info {
+  @apply badge bg-blue-100 text-blue-800;
+}
+
+/* Table styles */
+.table {
+  @apply min-w-full divide-y divide-gray-200;
+}
+
+.table th {
+  @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50;
+}
+
+.table td {
+  @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;
+}
+
+.table tbody tr {
+  @apply bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors;
+}
+
+.table tbody tr:last-child {
+  @apply border-b-0;
+}
+
+/* Status indicator styles */
+.status-indicator {
+  @apply inline-block w-2 h-2 rounded-full mr-2;
+}
+
+.status-pending {
+  @apply status-indicator bg-yellow-400;
+}
+
+.status-processing {
+  @apply status-indicator bg-blue-400;
+}
+
+.status-completed {
+  @apply status-indicator bg-green-400;
+}
+
+.status-failed {
+  @apply status-indicator bg-red-400;
+}
+
+.status-waiting {
+  @apply status-indicator bg-gray-400;
+}
+
+/* Loading spinner */
+.spinner {
+  @apply inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin;
+}
+
+/* Animation utilities */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+.animate-slide-down {
+  animation: slideDown 0.3s ease-out;
+}
+
+/* Utility classes */
+.text-balance {
+  text-wrap: balance;
+}
+
+/* Chart container */
+.chart-container {
+  @apply relative h-64 w-full;
+}
+
+/* Responsive table container */
+.table-container {
+  @apply overflow-x-auto rounded-lg border border-gray-200;
+}
+
+/* Empty state */
+.empty-state {
+  @apply text-center py-12 px-4;
+}
+
+.empty-state-icon {
+  @apply w-16 h-16 mx-auto mb-4 text-gray-400;
+}
+
+.empty-state-title {
+  @apply text-lg font-medium text-gray-900 mb-2;
+}
+
+.empty-state-description {
+  @apply text-sm text-gray-500;
+}
+
+/* Toast notification */
+.toast {
+  @apply fixed bottom-4 right-4 z-50 max-w-sm p-4 bg-white rounded-lg shadow-lg border border-gray-200;
+}
+
+.toast-success {
+  @apply border-green-500 bg-green-50;
+}
+
+.toast-error {
+  @apply border-red-500 bg-red-50;
+}
+
+.toast-warning {
+  @apply border-yellow-500 bg-yellow-50;
+}
+
+.toast-info {
+  @apply border-blue-500 bg-blue-50;
+}

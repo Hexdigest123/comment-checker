@@ -1,9 +1,17 @@
+"""
+TypeSafe client for Jev model
+Adapted from existing utils/typesafe.py
+"""
+
 import os
-from typing import Text
+from typing import Text, Any, Dict
 
 from typesafe_sdk import Choice, Noul, Score, TypeSafeClient
 
-from utils import logger
+from ..config import get_settings
+
+# Get settings
+settings = get_settings()
 
 
 HATE_CATEGORIES = {
@@ -27,7 +35,8 @@ SEVERITY_LEVELS = [
 
 
 class TypeSafeLLMClient:
-    """Comment classifier backed by TypeSafe's Jev (System One) model.
+    """
+    Comment classifier backed by TypeSafe's Jev (System One) model.
 
     Jev evaluates typed questions against a state and returns structured
     decisions (Choice, Score, Noul) with calibrated probabilities. There is
@@ -41,9 +50,9 @@ class TypeSafeLLMClient:
     ):
         self.model = model
         self.context = context or ""
-        self.api_key = os.environ.get("TYPESAFE_API_KEY") or ""
+        self.api_key = settings.typesafe_api_key or os.environ.get("TYPESAFE_API_KEY")
         if not self.api_key:
-            logger.fatal("TypeSafe API Key not found in environment (TYPESAFE_API_KEY)!")
+            raise ValueError("TypeSafe API Key not found. Set TYPESAFE_API_KEY in environment.")
         self.client = TypeSafeClient(api_key=self.api_key)
 
     def _state(self, comment: Text) -> Text:
@@ -70,12 +79,13 @@ class TypeSafeLLMClient:
             ),
         }
 
-    def classify(self, comment: Text) -> dict:
-        """Classify a comment with TypeSafe Jev.
+    def classify(self, comment: Text) -> Dict[str, Any]:
+        """
+        Classify a comment with TypeSafe Jev.
 
         Returns a dict of category scores in the 0-1 probability range so the
         result stays compatible with the threshold-based flagging used in the
-        existing pipeline. ``category`` holds the discrete category choice.
+        existing pipeline. `category` holds the discrete category choice.
         """
         response = self.client.system_one(
             model=self.model,
@@ -95,10 +105,4 @@ class TypeSafeLLMClient:
         scores["confidence"] = float(getattr(category_answer, "confidence", 0.0))
         scores["severity"] = float(severity_answer.score)
 
-        print(
-            f"TypeSafe Jev: category={category_answer.choice} "
-            f"harmful={harmful_answer.noul:.3f} "
-            f"severity={severity_answer.score:.2f} "
-            f"confidence={scores['confidence']:.3f}"
-        )
         return scores

@@ -1,0 +1,151 @@
+---
+import RootLayout from '../layouts/RootLayout.astro';
+import { useState, useRef, useCallback } from 'react';
+import { Button, Input } from '../components/ui';
+import { useAuth } from '../services/auth';
+import { commentApi } from '../services/api';
+import type { CSVUploadResponse } from '../types';
+
+const UploadPage = () => {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [file, setFile] = useState<File | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [results, setResults] = useState<CSVUploadResponse | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+      setError('');
+      setSuccess('');
+      setResults(null);
+    }
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!file) {
+      setError('Please select a file');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await commentApi.uploadCSV(file);
+      const data = response.data as CSVUploadResponse;
+      setResults(data);
+      setSuccess(`${data.comments_created} comments uploaded successfully!`);
+      setFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload CSV');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="p-8">
+        <div className="bg-yellow-50 text-yellow-600 p-4 rounded-lg">
+          Please login to upload files
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8">
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-3xl font-bold text-gray-800 mb-6">Upload CSV</h1>
+
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          {error && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-6">
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-6">
+              {success}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                CSV File
+              </label>
+              <Input
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                ref={fileInputRef}
+                required
+              />
+              <p className="mt-1 text-sm text-gray-500">
+                CSV file should contain comment text and optionally source URLs
+              </p>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-medium text-gray-700 mb-2">CSV Format</h3>
+              <p className="text-sm text-gray-600 mb-2">
+                Your CSV should have the following columns:
+              </p>
+              <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                <li><strong>text</strong> or <strong>comment</strong> - The comment text (required)</li>
+                <li><strong>source_url</strong> or <strong>url</strong> - The source URL (optional)</li>
+                <li><strong>user</strong> or <strong>author</strong> - The user who wrote the comment (optional)</li>
+              </ul>
+              <p className="text-sm text-gray-500 mt-2">
+                Note: Social media URL ingestion is coming soon!
+              </p>
+            </div>
+
+            {results && (
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="font-medium text-blue-800 mb-2">Upload Results</h3>
+                <p className="text-sm text-blue-700">
+                  {results.comments_created} comments were created from the CSV file.
+                </p>
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              variant="primary"
+              isLoading={isLoading}
+              fullWidth
+              size="lg"
+            >
+              Upload CSV
+            </Button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+---
+
+<RootLayout title="Upload CSV - Comment Checker">
+  <UploadPage client:load />
+</RootLayout>

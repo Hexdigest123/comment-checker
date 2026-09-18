@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: comment-checker-backend
+    env_file:
+      - .env
+      - backend/.env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-comment_checker}:${DB_PASSWORD}@db:5432/${DB_NAME:-comment_checker}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - SMTP_HOST=${SMTP_HOST:-mailpit}
+      - SMTP_PORT=${SMTP_PORT:-1025}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - EMAIL_FROM=${EMAIL_FROM:-noreply@comment-checker.local}
+      - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL}
+      - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD}
+      - FIRST_ADMIN_NAME=${FIRST_ADMIN_NAME:-Admin}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - DEBUG=${DEBUG:-false}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: comment-checker-frontend
+    env_file:
+      - .env
+      - frontend/.env
+    environment:
+      - NODE_ENV=production
+      - PUBLIC_API_URL=${PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  db:
+    image: postgres:18-alpine
+    container_name: comment-checker-db
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${DB_USER:-comment_checker}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME:-comment_checker}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-comment_checker} -d ${DB_NAME:-comment_checker}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
