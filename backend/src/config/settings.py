@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     mistral_api_key: Optional[str] = None
 
     # Classification Configuration
-    default_backend: str = "typesafe"  # typesafe, mistral, or combined
+    default_backend: str = "mistral"  # typesafe, mistral, or combined
     classification_threshold: float = 0.3
     max_comments_per_request: int = 100
 
