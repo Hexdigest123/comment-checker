@@ -25,8 +25,10 @@ def classify_mistral(client, comment: str, threshold: float, fallback: bool = Tr
     """
     scores = client.classify(comment)
     flags = {label: score >= threshold for label, score in scores.items()}
-    flagged_by = "mistral_moderation"
-    if not any(flags.values()) and fallback:
+    flagged_by = None
+    if any(flags.values()):
+        flagged_by = "mistral_moderation"
+    elif fallback:
         second_opinion = client.check_with_context(comment)
         if second_opinion:
             flags["hate_speech"] = True
@@ -53,13 +55,17 @@ def classify_mistral(client, comment: str, threshold: float, fallback: bool = Tr
 
 
 def main(file_path: str):
-    data = csv.CSVReader(os.path.join(os.getcwd(), file_path), ",").df
+    full_path = os.path.join(os.getcwd(), file_path)
+    if not os.path.exists(full_path):
+        from utils import logger
+        logger.fatal(f"Input file not found: {full_path}")
+    data = csv.CSVReader(full_path).df
     client = build_client(args.backend, args.context)
 
     data = data.head(args.max)
 
     has_ground_truth = "Kategorie" in data.columns
-    out_path = args.out or "results_mistral.jsonl"
+    out_path = args.out or f"results_{args.backend}.jsonl"
     records = []
 
     with open(out_path, "w", encoding="utf-8") as out_file:

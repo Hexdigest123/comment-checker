@@ -4,7 +4,7 @@ import pandas as pd
 class CSVReader:
 
     def __init__(
-        self, file_path: str, delimiter: str = ";", encoding: str = "utf-8"
+        self, file_path: str, delimiter: str = ",", encoding: str = "utf-8"
     ) -> None:
         """initialize the CSVReader for further processing
 
