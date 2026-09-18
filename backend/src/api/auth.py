@@ -17,7 +17,7 @@ from sqlalchemy.future import select
 
 from ..config import get_settings
 from ..db.session import get_async_db
-from ..models import User, RefreshToken, TokenStatus
+from ..db.models import User, RefreshToken, TokenStatus
 from ..schemas import (
     LoginRequest,
     LoginResponse,

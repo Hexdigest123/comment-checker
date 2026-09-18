@@ -3,8 +3,8 @@
 import pytest
 from datetime import datetime, timedelta
 
-from src.models import User, RefreshToken
-from src.utils.security import get_password_hash, verify_password
+from src.db.models import User, RefreshToken
+from src.services.auth import get_password_hash, verify_password
 
 
 class TestAuthLogin:

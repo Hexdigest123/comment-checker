@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from ..config import get_settings
-from ..models import Comment, Classification, BackendType, CategoryType, SeverityLevel
+from ..db.models import Comment, Classification, ClassificationBackend, ClassificationCategory, ClassificationSeverity
 from ..schemas import ClassificationCreate, PageParams, PageResponse, ClassificationListResponse, ClassificationStatsResponse
 
 # Get settings
@@ -248,13 +248,13 @@ async def classify_comment(
         # Create classification record
         classification = Classification(
             comment_id=comment_id,
-            backend=BackendType(backend),
+            backend=ClassificationBackend(backend),
             flagged=result.get("flagged", False),
             flagged_by=result.get("flagged_by"),
-            category=CategoryType(result.get("category")) if result.get("category") else None,
+            category=ClassificationCategory(result.get("category")) if result.get("category") else None,
             scores=result.get("scores", {}),
             confidence=result.get("confidence"),
-            severity=SeverityLevel(result.get("severity")) if result.get("severity") else None,
+            severity=ClassificationSeverity(result.get("severity")) if result.get("severity") else None,
             harmful=result.get("harmful", 0.0),
             threshold=threshold,
             processing_time_ms=round((time.time() - start_time) * 1000, 2),
@@ -512,7 +512,7 @@ async def get_classification_stats(
     # Get category distribution
     from sqlalchemy import case, cast, String
     category_dist = {}
-    for cat in CategoryType:
+    for cat in ClassificationCategory:
         count_result = await db.execute(
             select(func.count())
             .where(
@@ -526,7 +526,7 @@ async def get_classification_stats(
     
     # Get severity distribution
     severity_dist = {}
-    for sev in SeverityLevel:
+    for sev in ClassificationSeverity:
         count_result = await db.execute(
             select(func.count())
             .where(

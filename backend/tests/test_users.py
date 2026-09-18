@@ -3,8 +3,8 @@
 import pytest
 from datetime import datetime
 
-from src.models import User
-from src.utils.security import get_password_hash
+from src.db.models import User
+from src.services.auth import get_password_hash
 
 
 class TestUsersList:

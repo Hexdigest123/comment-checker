@@ -15,7 +15,7 @@ from sqlalchemy import or_
 
 from ..config import get_settings
 from ..db.session import get_async_db
-from ..models import User, Comment, Classification
+from ..db.models import User, Comment, Classification
 from ..schemas import (
     UserCreate,
     UserUpdate,
