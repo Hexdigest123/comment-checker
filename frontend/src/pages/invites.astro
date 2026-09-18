@@ -1,0 +1,233 @@
+---
+import RootLayout from '../layouts/RootLayout.astro';
+import { useState, useEffect, useCallback } from 'react';
+import { Button, Input, Modal, DataTable, StatusBadge } from '../components';
+import { useAuth } from '../services/auth';
+import { inviteApi, userApi } from '../services/api';
+import type { InviteToken, User, PageResponse } from '../types';
+
+const InvitesPage = () => {
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const [invites, setInvites] = useState<InviteToken[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newInviteEmail, setNewInviteEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
+
+  const fetchData = useCallback(async () => {
+    if (!isAuthenticated) return;
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const [invitesRes, usersRes] = await Promise.all([
+        inviteApi.list(),
+        userApi.list(),
+      ]);
+      setInvites(invitesRes.data as InviteToken[]);
+      setUsers(usersRes.data.items as User[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleCreateInvite = async () => {
+    if (!newInviteEmail) {
+      setEmailError('Email is required');
+      return;
+    }
+
+    setEmailError('');
+    setIsLoading(true);
+
+    try {
+      await inviteApi.create(newInviteEmail);
+      setSuccess('Invite created successfully!');
+      setNewInviteEmail('');
+      setIsModalOpen(false);
+      await fetchData();
+    } catch (err) {
+      setEmailError(err instanceof Error ? err.message : 'Failed to create invite');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRevokeInvite = async (token: string) => {
+    try {
+      await inviteApi.delete(token);
+      setSuccess('Invite revoked successfully!');
+      await fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to revoke invite');
+    }
+  };
+
+  const inviteColumns = [
+    { key: 'email', header: 'Email', sortable: true },
+    { key: 'token', header: 'Token', sortable: true, className: 'font-mono text-xs' },
+    { key: 'is_used', header: 'Used', sortable: true, render: (item: InviteToken) => (
+      <StatusBadge status={item.is_used ? 'completed' : 'pending'} />
+    ) },
+    { key: 'expires_at', header: 'Expires At', sortable: true },
+    { key: 'created_at', header: 'Created At', sortable: true },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (item: InviteToken) => (
+        <Button
+          size="sm"
+          variant="danger"
+          onClick={() => handleRevokeInvite(item.token)}
+          disabled={item.is_used}
+        >
+          Revoke
+        </Button>
+      ),
+    },
+  ];
+
+  const userColumns = [
+    { key: 'email', header: 'Email', sortable: true },
+    { key: 'name', header: 'Name', sortable: true },
+    { key: 'is_admin', header: 'Admin', sortable: true, render: (item: User) => (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.is_admin ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+        {item.is_admin ? 'Yes' : 'No'}
+      </span>
+    ) },
+    { key: 'is_active', header: 'Active', sortable: true, render: (item: User) => (
+      <StatusBadge status={item.is_active ? 'completed' : 'failed'} />
+    ) },
+    { key: 'created_at', header: 'Created At', sortable: true },
+  ];
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="p-8">
+        <div className="bg-yellow-50 text-yellow-600 p-4 rounded-lg">
+          Please login to view invites
+        </div>
+      </div>
+    );
+  }
+
+  if (!user?.is_admin) {
+    return (
+      <div className="p-8">
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg">
+          Admin access required
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-800">Admin Management</h1>
+        <Button variant="primary" onClick={() => setIsModalOpen(true)}>
+          Create Invite
+        </Button>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-6">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="bg-green-50 text-green-600 p-4 rounded-lg mb-6">
+          {success}
+        </div>
+      )}
+
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold text-gray-700 mb-4">Invite Tokens</h2>
+        <DataTable
+          data={invites}
+          columns={inviteColumns}
+          total={invites.length}
+          page={1}
+          pageSize={10}
+          onPageChange={() => {}}
+          onPageSizeChange={() => {}}
+          showPagination={false}
+          isLoading={isLoading}
+          emptyMessage="No invite tokens found"
+        />
+      </div>
+
+      <div>
+        <h2 className="text-2xl font-semibold text-gray-700 mb-4">Users</h2>
+        <DataTable
+          data={users}
+          columns={userColumns}
+          total={users.length}
+          page={1}
+          pageSize={10}
+          onPageChange={() => {}}
+          onPageSizeChange={() => {}}
+          showPagination={false}
+          isLoading={isLoading}
+          emptyMessage="No users found"
+        />
+      </div>
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setNewInviteEmail('');
+          setEmailError('');
+        }}
+        title="Create New Invite"
+      >
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          handleCreateInvite();
+        }} className="space-y-4">
+          {emailError && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-lg">
+              {emailError}
+            </div>
+          )}
+          <Input
+            label="Email"
+            type="email"
+            value={newInviteEmail}
+            onChange={(e) => setNewInviteEmail(e.target.value)}
+            required
+            placeholder="Enter email for invite"
+          />
+          <Button type="submit" variant="primary" fullWidth isLoading={isLoading}>
+            Create Invite
+          </Button>
+        </form>
+      </Modal>
+    </div>
+  );
+};
+---
+
+<RootLayout title="Admin Management - Comment Checker">
+  <InvitesPage client:load />
+</RootLayout>

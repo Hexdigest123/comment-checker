@@ -1,0 +1,221 @@
+---
+import RootLayout from '../../layouts/RootLayout.astro';
+import { useState, useEffect } from 'react';
+import { Button, StatusBadge, BackendBadge, CategoryBadge, SeverityBadge } from '../../components/ui';
+import { useAuth } from '../../services/auth';
+import { commentApi, classificationApi } from '../../services/api';
+import type { Comment, Classification } from '../../types';
+
+const CommentDetailPage = ({ params }: { params: { id: string } }) => {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [comment, setComment] = useState<Comment | null>(null);
+  const [classifications, setClassifications] = useState<Classification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isAuthenticated) return;
+
+      setIsLoading(true);
+      setError('');
+
+      try {
+        const [commentRes, classificationsRes] = await Promise.all([
+          commentApi.get(params.id),
+          classificationApi.list({ comment_id: params.id } as unknown as { page?: number; page_size?: number; comment_id?: string; backend?: string; category?: string }),
+        ]);
+        setComment(commentRes.data as Comment);
+        setClassifications(classificationsRes.data.items as Classification[]);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch comment details');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (!authLoading) {
+      fetchData();
+    }
+  }, [params.id, isAuthenticated, authLoading]);
+
+  const handleClassify = async () => {
+    if (!comment) return;
+
+    try {
+      await commentApi.classify(comment.id);
+      // Refresh data
+      const [commentRes, classificationsRes] = await Promise.all([
+        commentApi.get(params.id),
+        classificationApi.list({ comment_id: params.id } as unknown as { page?: number; page_size?: number; comment_id?: string; backend?: string; category?: string }),
+      ]);
+      setComment(commentRes.data as Comment);
+      setClassifications(classificationsRes.data.items as Classification[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to classify comment');
+    }
+  };
+
+  const handleReclassify = async () => {
+    if (!comment) return;
+
+    try {
+      await commentApi.reclassify(comment.id);
+      // Refresh data
+      const [commentRes, classificationsRes] = await Promise.all([
+        commentApi.get(params.id),
+        classificationApi.list({ comment_id: params.id } as unknown as { page?: number; page_size?: number; comment_id?: string; backend?: string; category?: string }),
+      ]);
+      setComment(commentRes.data as Comment);
+      setClassifications(classificationsRes.data.items as Classification[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reclassify comment');
+    }
+  };
+
+  if (authLoading || isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="p-8">
+        <div className="bg-yellow-50 text-yellow-600 p-4 rounded-lg">
+          Please login to view comment details
+        </div>
+      </div>
+    );
+  }
+
+  if (!comment) {
+    return (
+      <div className="p-8">
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg">
+          Comment not found
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold text-gray-800">Comment Details</h1>
+          <a href="/comments" className="text-blue-600 hover:text-blue-700 font-medium">
+            Back to Comments
+          </a>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
+          <h2 className="text-xl font-semibold text-gray-700 mb-4">Comment Information</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1">Text</label>
+              <p className="text-gray-900">{comment.text}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1">Status</label>
+              <StatusBadge status={comment.status} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1">Source URL</label>
+              {comment.source_url ? (
+                <a href={comment.source_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
+                  {comment.source_url}
+                </a>
+              ) : (
+                <p className="text-gray-500">None</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1">Created At</label>
+              <p className="text-gray-900">{new Date(comment.created_at).toLocaleString()}</p>
+            </div>
+          </div>
+
+          <div className="mt-6 flex gap-4">
+            {comment.status === 'pending' && (
+              <Button variant="primary" onClick={handleClassify}>
+                Classify
+              </Button>
+            )}
+            {(comment.status === 'completed' || comment.status === 'failed') && (
+              <Button variant="outline" onClick={handleReclassify}>
+                Reclassify
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-gray-700">Classifications</h2>
+            <span className="text-sm text-gray-500">{classifications.length} total</span>
+          </div>
+
+          {classifications.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">
+              No classifications for this comment yet
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Backend</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Harmful Score</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Classified At</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {classifications.map((classification) => (
+                    <tr key={classification.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <BackendBadge backend={classification.backend} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <CategoryBadge category={classification.category} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <SeverityBadge severity={classification.severity} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {((classification.confidence || 0) * 100).toFixed(1)}%
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {(classification.harmful_score || 0).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(classification.created_at).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+---
+
+<RootLayout title="Comment Details - Comment Checker">
+  <CommentDetailPage client:load params={Astro.params} />
+</RootLayout>

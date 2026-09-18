@@ -1,0 +1,145 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DOCKER_COMPOSE_VERSION: 2.24.5
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up Docker Compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/v${{ env.DOCKER_COMPOSE_VERSION }}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+
+      - name: Login to Docker (for cache)
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME || 'dummy' }}
+          password: ${{ secrets.DOCKER_PASSWORD || 'dummy' }}
+        continue-on-error: true
+
+      - name: Create .env files
+        run: |
+          # Create root .env
+          cat > .env << 'EOF'
+          DB_USER=${{ secrets.DB_USER || 'comment_checker' }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD || 'dev_password' }}
+          DB_NAME=${{ secrets.DB_NAME || 'comment_checker' }}
+          JWT_SECRET=${{ secrets.JWT_SECRET || 'dev_secret_change_in_production' }}
+          MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY || '' }}
+          FIRST_ADMIN_EMAIL=${{ secrets.FIRST_ADMIN_EMAIL || 'admin@localhost' }}
+          FIRST_ADMIN_PASSWORD=${{ secrets.FIRST_ADMIN_PASSWORD || 'admin' }}
+          FIRST_ADMIN_NAME=${{ secrets.FIRST_ADMIN_NAME || 'Admin' }}
+          SMTP_HOST=${{ secrets.SMTP_HOST || 'mailpit' }}
+          SMTP_PORT=${{ secrets.SMTP_PORT || '1025' }}
+          SMTP_USER=${{ secrets.SMTP_USER || '' }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD || '' }}
+          EMAIL_FROM=${{ secrets.EMAIL_FROM || 'noreply@comment-checker.local' }}
+          CORS_ORIGINS=${{ secrets.CORS_ORIGINS || '*' }}
+          DEBUG=${{ secrets.DEBUG || 'false' }}
+          EOF
+
+          # Create backend .env
+          cat > backend/.env << 'EOF'
+          DATABASE_URL=postgresql+asyncpg://${{ secrets.DB_USER || 'comment_checker' }}:${{ secrets.DB_PASSWORD || 'dev_password' }}@db:5432/${{ secrets.DB_NAME || 'comment_checker' }}
+          JWT_SECRET=${{ secrets.JWT_SECRET || 'dev_secret_change_in_production' }}
+          JWT_ALGORITHM=HS256
+          ACCESS_TOKEN_EXPIRE_MINUTES=30
+          REFRESH_TOKEN_EXPIRE_DAYS=7
+          MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY || '' }}
+          SMTP_HOST=${{ secrets.SMTP_HOST || 'mailpit' }}
+          SMTP_PORT=${{ secrets.SMTP_PORT || '1025' }}
+          SMTP_USER=${{ secrets.SMTP_USER || '' }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD || '' }}
+          EMAIL_FROM=${{ secrets.EMAIL_FROM || 'noreply@comment-checker.local' }}
+          FIRST_ADMIN_EMAIL=${{ secrets.FIRST_ADMIN_EMAIL || 'admin@localhost' }}
+          FIRST_ADMIN_PASSWORD=${{ secrets.FIRST_ADMIN_PASSWORD || 'admin' }}
+          FIRST_ADMIN_NAME=${{ secrets.FIRST_ADMIN_NAME || 'Admin' }}
+          CORS_ORIGINS=${{ secrets.CORS_ORIGINS || '*' }}
+          DEBUG=${{ secrets.DEBUG || 'false' }}
+          EOF
+
+          # Create frontend .env
+          cat > frontend/.env << 'EOF'
+          PUBLIC_API_URL=${{ secrets.PUBLIC_API_URL || 'http://localhost:8000' }}
+          NODE_ENV=production
+          EOF
+
+      - name: Build production images
+        run: |
+          docker compose -f docker-compose.prod.yml build --no-cache
+
+      - name: Save Docker images
+        run: |
+          mkdir -p images
+          docker save -o images/backend.tar comment-checker-backend || true
+          docker save -o images/frontend.tar comment-checker-frontend || true
+
+      - name: Upload images as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: images/
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Download images
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+          path: images/
+
+      - name: Load and tag images
+        run: |
+          docker load -i images/backend.tar || true
+          docker load -i images/frontend.tar || true
+          
+          # Tag images with commit SHA for traceability
+          docker tag comment-checker-backend comment-checker-backend:${{ github.sha }} || true
+          docker tag comment-checker-frontend comment-checker-frontend:${{ github.sha }} || true
+
+      - name: Create deployment archive
+        run: |
+          mkdir -p deploy
+          cp docker-compose.prod.yml deploy/
+          cp -r backend deploy/backend/
+          cp -r frontend deploy/frontend/
+          cp .env deploy/ || true
+          cp backend/.env deploy/backend/ || true
+          cp frontend/.env deploy/frontend/ || true
+          
+          # Create a tar of the deployment files
+          tar -czvf deploy.tar.gz deploy/
+
+      - name: Upload deployment archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-archive
+          path: deploy.tar.gz
+          retention-days: 1
+
+      - name: Notify VPS to pull and deploy
+        run: |
+          echo "::notice::Deployment archive ready for VPS to pull"
+          echo "::notice::Run on VPS: wget ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} -O deploy.tar.gz"
+          echo "::notice::Then: tar -xzvf deploy.tar.gz && cd deploy && docker compose -f docker-compose.prod.yml up -d --build"

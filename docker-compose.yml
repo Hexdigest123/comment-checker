@@ -1,0 +1,171 @@
+# =============================================================================
+# DOCKER COMPOSE - DEVELOPMENT
+# Comment Checker Monorepo
+# =============================================================================
+#
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose down           # Stop all services
+#   docker compose logs -f       # View logs
+#   docker compose exec backend bash  # Open shell in backend
+#   docker compose exec frontend bash # Open shell in frontend
+#
+# Services:
+#   - backend: FastAPI application (port 8000)
+#   - frontend: Astro + Next.js (port 3000)
+#   - db: PostgreSQL 18 Alpine (port 5432)
+#   - mailpit: Email testing (ports 8025, 1025)
+#
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ===========================================================================
+  # BACKEND - FastAPI
+  # ===========================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: comment-checker-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+      - backend/.env
+    environment:
+      - PRODUCTION=false
+      - DATABASE_URL=postgresql+asyncpg://comment_checker:${DB_PASSWORD}@db:5432/comment_checker
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=comment_checker
+      - DB_USER=comment_checker
+      - DB_PASSWORD=${DB_PASSWORD:-your_secure_db_password_here}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your_jwt_secret_key_here_change_in_production}
+      - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL:-admin@localhost}
+      - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD:-your_secure_admin_password_here}
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+      - TYPESAFE_API_KEY=${TYPESAFE_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/.env:/app/.env:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/api/health', timeout=5).raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - comment-checker-network
+
+  # ===========================================================================
+  # FRONTEND - Astro + Next.js
+  # ===========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
+    container_name: comment-checker-frontend
+    restart: unless-stopped
+    env_file:
+      - .env
+      - frontend/.env
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_FRONTEND_URL=http://localhost:3000
+      - NEXT_PUBLIC_DASHBOARD_DEFAULT_RANGE=1y
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src:ro
+      - ./frontend/public:/app/public:ro
+      - ./frontend/package.json:/app/package.json:ro
+      - ./frontend/tsconfig.json:/app/tsconfig.json:ro
+      - ./frontend/astro.config.mjs:/app/astro.config.mjs:ro
+      - ./frontend/tailwind.config.mjs:/app/tailwind.config.mjs:ro
+      - ./frontend/postcss.config.mjs:/app/postcss.config.mjs:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - comment-checker-network
+
+  # ===========================================================================
+  # DATABASE - PostgreSQL 18 Alpine
+  # ===========================================================================
+  db:
+    image: postgres:18-alpine
+    container_name: comment-checker-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=comment_checker
+      - POSTGRES_USER=comment_checker
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-your_secure_db_password_here}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/src/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U comment_checker -d comment_checker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - comment-checker-network
+
+  # ===========================================================================
+  # MAILPIT - Email Testing
+  # ===========================================================================
+  mailpit:
+    image: axllent/mailpit
+    container_name: comment-checker-mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"  # Web UI
+      - "1025:1025"  # SMTP
+    environment:
+      - MP_MAX_MESSAGES=1000
+      - MP_SMTP_AUTH_ACCEPT_ANY=true
+      - MP_SMTP_AUTH_ALLOW_INSECURE=true
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8025"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - comment-checker-network
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+
+volumes:
+  postgres_data:
+    driver: local
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+
+networks:
+  comment-checker-network:
+    driver: bridge
