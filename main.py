@@ -4,6 +4,7 @@ from utils import csv
 import os
 import argparse
 import json
+from typing import Dict, Any, Union, Tuple
 
 from utils.typesafe import TypeSafeLLMClient
 from utils.llm import LLMClient
@@ -14,7 +15,7 @@ parser = argparse.ArgumentParser(
 )
 
 
-def build_client(backend: str, context: str):
+def build_client(backend: str, context: str) -> Union[TypeSafeLLMClient, LLMClient, Tuple[TypeSafeLLMClient, LLMClient]]:
     if backend == "typesafe":
         return TypeSafeLLMClient(context=context)
     if backend == "mistral":
@@ -27,7 +28,7 @@ def build_client(backend: str, context: str):
     raise ValueError(f"Unknown backend: {backend}")
 
 
-def classify_mistral(client, comment: str, threshold: float, fallback: bool = True):
+def classify_mistral(client: LLMClient, comment: str, threshold: float, fallback: bool = True) -> Dict[str, Any]:
     """Run the Mistral Moderation 2 pipeline.
 
     With fallback (default), comments not flagged by moderation get a
@@ -35,8 +36,10 @@ def classify_mistral(client, comment: str, threshold: float, fallback: bool = Tr
     """
     scores = client.classify(comment)
     flags = {label: score >= threshold for label, score in scores.items()}
-    flagged_by = "mistral_moderation"
-    if not any(flags.values()) and fallback:
+    flagged_by = None
+    if any(flags.values()):
+        flagged_by = "mistral_moderation"
+    elif fallback:
         second_opinion = client.check_with_context(comment)
         if second_opinion:
             flags["hate_speech"] = True
@@ -56,7 +59,7 @@ def classify_mistral(client, comment: str, threshold: float, fallback: bool = Tr
     }
 
 
-def classify_typesafe(client, comment: str, threshold: float):
+def classify_typesafe(client: TypeSafeLLMClient, comment: str, threshold: float) -> Dict[str, Any]:
     """Run the TypeSafe Jev pipeline (no LLM fallback)."""
     scores = client.classify(comment)
     harmful = float(scores.get("harmful", 0.0))
@@ -73,7 +76,7 @@ def classify_typesafe(client, comment: str, threshold: float):
     }
 
 
-def classify_combined(clients, comment: str, threshold: float, fallback: bool = True):
+def classify_combined(clients: Tuple[TypeSafeLLMClient, LLMClient], comment: str, threshold: float, fallback: bool = True) -> Dict[str, Any]:
     """Run TypeSafe Jev for classification, then the Mistral in-context
     fallback only for the comments Jev did not flag.
 
@@ -106,8 +109,12 @@ def classify_combined(clients, comment: str, threshold: float, fallback: bool = 
     }
 
 
-def main(file_path: str):
-    data = csv.CSVReader(os.path.join(os.getcwd(), file_path), ",").df
+def main(file_path: str) -> None:
+    full_path = os.path.join(os.getcwd(), file_path)
+    if not os.path.exists(full_path):
+        from utils import logger
+        logger.fatal(f"Input file not found: {full_path}")
+    data = csv.CSVReader(full_path).df
     client = build_client(args.backend, args.context)
 
     data = data.head(args.max)
@@ -122,7 +129,8 @@ def main(file_path: str):
             if args.backend == "typesafe":
                 result = classify_typesafe(client, comment, args.threshold)
             elif args.backend == "combined":
-                result = classify_combined(client, comment, args.threshold, args.fallback)
+                fallback = args.fallback if args.fallback is not None else True
+                result = classify_combined(client, comment, args.threshold, fallback)
             else:
                 result = classify_mistral(client, comment, args.threshold, args.fallback)
 
@@ -148,8 +156,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--predict",
         "-p",
-        nargs="?",
-        const="assets/test-data.csv",
+        default="assets/test-data.csv",
         metavar="FILE",
         help="Classify a CSV file (default: assets/test-data.csv)",
     )
@@ -190,5 +197,4 @@ if __name__ == "__main__":
         help="Run the second-pass in-context fallback for comments the first pass does not flag. Use --no-fallback to run only the first pass (Mistral Moderation 2 alone, or Jev alone). Default: on for mistral/combined. Ignored for typesafe.",
     )
     args = parser.parse_args()
-    if args.predict:
-        main(args.predict)
+    main(args.predict)

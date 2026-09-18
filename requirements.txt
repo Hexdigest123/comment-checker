@@ -1,6 +1,6 @@
-datasets
-mistralai
-pandas
-torch
-transformers
-typesafe-sdk
+datasets>=2.0.0
+mistralai>=1.0.0
+pandas>=2.0.0
+torch>=2.0.0
+transformers>=4.30.0
+typesafe-sdk>=0.1.0

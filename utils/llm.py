@@ -1,5 +1,5 @@
 import os
-from typing import Text
+from typing import Optional
 from mistralai.client import Mistral
 from utils import logger
 
@@ -7,14 +7,14 @@ from utils import logger
 class LLMClient:
     def __init__(
         self,
-        model: Text = "mistral-moderation-2603",
-        context: Text = None,
+        model: str = "mistral-moderation-2603",
+        context: Optional[str] = None,
     ):
         self.model = model
         self.context = context
-        self.api_key = os.environ["MISTRAL_API_KEY"] or ""
-        if self.api_key == "" or self.api_key == None:
-            logger.fatal("Mistral API Key not found in environment!")
+        self.api_key = os.environ.get("MISTRAL_API_KEY") or ""
+        if not self.api_key:
+            logger.fatal("MISTRAL_API_KEY environment variable is required but not set!")
         self.client = Mistral(api_key=self.api_key)
 
     def classify(self, comment: Text) -> dict:
@@ -78,7 +78,6 @@ text. Just "YES" or "NO".
         response = self.client.chat.complete(
             model="mistral-small-latest",
             messages=[
-                {"role": "system", "content": "You are a hate speech detection assistant. Judge the comment in the given context, not in isolation. A comment that endorses a hateful act described in the context is hate speech even if its words are innocuous. Respond ONLY with YES or NO."},
                 {"role": "user", "content": prompt}
             ],
             stream=False,

@@ -1,5 +1,5 @@
 import os
-from typing import Text
+from typing import Optional
 
 from typesafe_sdk import Choice, Noul, Score, TypeSafeClient
 
@@ -36,14 +36,14 @@ class TypeSafeLLMClient:
 
     def __init__(
         self,
-        model: Text = "jev-latest",
-        context: Text = None,
+        model: str = "jev-latest",
+        context: Optional[str] = None,
     ):
         self.model = model
         self.context = context or ""
         self.api_key = os.environ.get("TYPESAFE_API_KEY") or ""
         if not self.api_key:
-            logger.fatal("TypeSafe API Key not found in environment (TYPESAFE_API_KEY)!")
+            logger.fatal("TYPESAFE_API_KEY environment variable is required but not set!")
         self.client = TypeSafeClient(api_key=self.api_key)
 
     def _state(self, comment: Text) -> Text:

@@ -78,8 +78,12 @@ def evaluate(path, backend):
         avg_harmful = []
         for r in rows:
             gt = r.get("ground_truth")
+            if gt is None:
+                continue
             exp = expected_category(gt)
             pred = r.get("category")
+            if pred is None:
+                continue
             cat_dist[pred] += 1
             gt_dist[exp] += 1
             avg_severity.append(r.get("severity") or 0.0)
@@ -112,7 +116,7 @@ def evaluate(path, backend):
             summary["flagged_by_mistral_fallback"] = flagged_by.get("mistral_fallback", 0)
     else:
         avg_harmful = [r.get("harmful") or 0.0 for r in rows]
-        summary["avg_harmful"] = round(sum(avg_harmful) / n, 4)
+        summary["avg_harmful"] = round(sum(avg_harmful) / n, 4) if n > 0 else 0.0
         flagged_by = Counter(r.get("flagged_by") for r in rows)
         summary["flagged_by_mistral_moderation"] = flagged_by.get("mistral_moderation", 0)
         summary["flagged_by_context_fallback"] = flagged_by.get("mistral_fallback", 0)
@@ -120,7 +124,7 @@ def evaluate(path, backend):
         summary["moderation_flag_rate"] = {}
         for k in scores_keys:
             hit = sum(1 for r in rows if (r.get("scores") or {}).get(k, 0) >= 0.3)
-            summary["moderation_flag_rate"][k] = round(hit / n, 4)
+            summary["moderation_flag_rate"][k] = round(hit / n, 4) if n > 0 else 0.0
 
     return summary
 

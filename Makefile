@@ -15,4 +15,4 @@ install: $(VENV_PYTHON) requirements.txt
 setup: install
 
 train: setup
-	$(VENV_PYTHON) main.py --train --train-rows 1804874 --val-rows 97320 --bf16
+	$(VENV_PYTHON) -m utils.train
