@@ -3,7 +3,7 @@ Classification API router
 """
 
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -44,6 +44,7 @@ async def list_classifications(
     db: Annotated[AsyncSession, Depends(get_async_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
     params: PageParams = Depends(),
+    comment_id: Optional[int] = None,
 ) -> PageResponse[ClassificationListResponse]:
     """
     List classifications with pagination, search, sort, and filter.
@@ -52,12 +53,20 @@ async def list_classifications(
     - Pagination (page, page_size)
     - Search (in comment text)
     - Sort (sort_by, sort_order)
-    - Filter by backend, flagged, category, etc.
+    - Filter by comment, backend, flagged, category, etc.
     """
     filter_conditions = []
     
     if not current_user.is_admin:
-        filter_conditions.append(Comment.user_id == current_user.id)
+        # Scope to the user's own comments via EXISTS; a bare
+        # Comment.user_id filter would cross-join and not scope at all.
+        filter_conditions.append(
+            Classification.comment.has(Comment.user_id == current_user.id)
+        )
+    
+    # Comment filter
+    if comment_id is not None:
+        filter_conditions.append(Classification.comment_id == comment_id)
     
     # Backend filter
     if params.backend:

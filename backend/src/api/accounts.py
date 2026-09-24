@@ -82,7 +82,7 @@ async def list_external_accounts(
     combined_filter = and_(*filter_conditions) if filter_conditions else None
     
     query = select(ExternalAccount)
-    if combined_filter:
+    if combined_filter is not None:
         query = query.where(combined_filter)
     sort_by = params.sort_by or "created_at"
     sort_order = params.sort_order or "desc"
@@ -108,7 +108,7 @@ async def list_external_accounts(
         else:
             query = query.order_by(desc(ExternalAccount.created_at))
     count_query = select(func.count()).select_from(ExternalAccount)
-    if combined_filter:
+    if combined_filter is not None:
         count_query = count_query.where(combined_filter)
     
     count_result = await db.execute(count_query)

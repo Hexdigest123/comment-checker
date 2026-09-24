@@ -344,7 +344,7 @@ async def get_classifications_paginated(
     from sqlalchemy import func
     query = select(Classification).options(joinedload(Classification.comment))
     
-    if filter_condition:
+    if filter_condition is not None:
         query = query.where(filter_condition)
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)

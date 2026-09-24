@@ -122,7 +122,7 @@ async def list_clusters(
     combined_filter = and_(*filter_conditions) if filter_conditions else None
     
     query = select(AccountCluster)
-    if combined_filter:
+    if combined_filter is not None:
         query = query.where(combined_filter)
     sort_by = params.sort_by or "toxicity_score"
     sort_order = params.sort_order or "desc"
@@ -148,7 +148,7 @@ async def list_clusters(
         else:
             query = query.order_by(desc(AccountCluster.toxicity_score))
     count_query = select(func.count()).select_from(AccountCluster)
-    if combined_filter:
+    if combined_filter is not None:
         count_query = count_query.where(combined_filter)
     
     count_result = await db.execute(count_query)
