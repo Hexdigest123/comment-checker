@@ -73,7 +73,8 @@ class CommentListResponse(BaseModel):
     priority: str
     processed_at: Optional[datetime]
     created_at: datetime
-    
+    classifications: Optional[List[Dict[str, Any]]] = None
+
     class Config:
         from_attributes = True
 

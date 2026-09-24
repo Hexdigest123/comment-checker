@@ -1,9 +1,68 @@
-/* Global styles for Comment Checker */
+/* Global styles for Comment Checker — Mistral design system ("cream paper") */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Custom styles */
+/* ----- Theme tokens: light (cream) is default, .dark flips to steel ----- */
+/* Values are RGB triplets so Tailwind opacity modifiers keep working. */
+
+:root {
+  --color-white: 255 255 255;
+
+  /* Cream surfaces */
+  --color-mistral-surface: 251 251 248;        /* #fbfbf8 page background */
+  --color-mistral-band: 245 244 239;           /* #f5f4ef subtle bands, badges */
+  --color-mistral-inset: 235 233 224;          /* #ebe9e0 inset panels */
+
+  /* Hairline borders */
+  --color-mistral-border: 228 227 222;         /* #e4e3de */
+  --color-mistral-border-strong: 201 201 196;  /* #c9c9c4 */
+
+  /* Text + icons */
+  --color-mistral-ink: 26 26 26;               /* #1a1a1a */
+  --color-mistral-muted: 109 109 120;          /* #6d6d78 */
+
+  /* Joy accent tints */
+  --color-mistral-yellow-tint: 255 244 210;    /* #fff4d2 */
+  --color-mistral-yellow-highlight: 255 232 162; /* #ffe8a2 marker highlight */
+  --marker-highlight-alpha: 1;
+  --color-mistral-orange-tint: 255 240 235;    /* #fff0eb */
+  --color-mistral-pink-tint: 255 225 244;      /* #ffe1f4 */
+  --color-mistral-green-tint: 231 246 238;     /* #e7f6ee */
+  --color-mistral-blue-tint: 230 243 253;      /* #e6f3fd */
+  --color-mistral-red-tint: 255 234 232;       /* #ffeae8 */
+}
+
+.dark {
+  --color-white: 23 23 27;                     /* cards: steel-900, never mid-gray */
+
+  /* Steel/navy surfaces — deep with a slight cool cast */
+  --color-mistral-surface: 14 14 17;           /* steel-950 */
+  --color-mistral-band: 23 23 27;              /* steel-900 */
+  --color-mistral-inset: 30 30 38;             /* steel-800 */
+
+  /* Hairline borders */
+  --color-mistral-border: 49 49 58;            /* #31313a */
+  --color-mistral-border-strong: 71 71 84;     /* #474754 */
+
+  /* Text + icons */
+  --color-mistral-ink: 251 251 248;            /* cream-50 */
+  --color-mistral-muted: 168 168 178;          /* cool zinc */
+
+  /* Joy accent tints become dark washes of the same hue */
+  --color-mistral-yellow-tint: 51 41 14;
+  --color-mistral-yellow-highlight: 254 200 53; /* #fec835, translucent in dark mode */
+  --marker-highlight-alpha: 0.45;
+  --color-mistral-orange-tint: 51 25 13;
+  --color-mistral-pink-tint: 51 18 38;
+  --color-mistral-green-tint: 15 42 30;
+  --color-mistral-blue-tint: 12 34 55;
+  --color-mistral-red-tint: 52 18 16;
+}
+
+html {
+  background-color: rgb(var(--color-mistral-surface));
+}
 
 /* ----- Mistral design system helpers ----- */
 
@@ -19,13 +78,35 @@
 
 /* Yellow marker highlight for one or two key words per page */
 .marker-highlight {
-  background-image: linear-gradient(to top, rgba(254, 200, 53, 0) 42%, #ffe8a2 42%, #ffe8a2 92%, rgba(254, 200, 53, 0) 92%);
+  background-image: linear-gradient(
+    to top,
+    transparent 42%,
+    rgb(var(--color-mistral-yellow-highlight) / var(--marker-highlight-alpha)) 42%,
+    rgb(var(--color-mistral-yellow-highlight) / var(--marker-highlight-alpha)) 92%,
+    transparent 92%
+  );
   padding: 0 0.15em;
   border-radius: 2px;
 }
 
+/* Arrow-CTA: the arrow slides right on hover (pure CSS) */
+.arrow-link .arrow {
+  transition: transform 300ms;
+  will-change: transform;
+}
+
+@media (hover: hover) {
+  .group:hover .arrow-link .arrow,
+  .group:hover > .arrow,
+  .group:hover .arrow {
+    transform: translateX(4px);
+    transition-delay: 75ms;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .arrow-link .arrow {
+  .arrow-link .arrow,
+  .arrow {
     transition: none !important;
   }
 }
@@ -37,60 +118,64 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: rgb(var(--color-mistral-band));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: rgb(var(--color-mistral-border-strong));
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
+  background: rgb(var(--color-mistral-muted));
 }
 
-/* Focus styles */
+/* Focus styles — persimmon red */
 *:focus-visible {
-  outline: 2px solid #0ea5e9;
+  outline: 2px solid #f66c60;
   outline-offset: 2px;
 }
 
-/* Card styles */
+/* Card styles — border-first, no shadows */
 .card {
-  @apply bg-white rounded-lg shadow-sm border border-gray-200;
+  @apply bg-white rounded-md border border-mistral-border;
 }
 
 .card-hover {
-  @apply transition-shadow hover:shadow-md;
+  @apply transition-colors duration-300 hover:border-mistral-border-strong;
 }
 
-/* Button styles */
+/* Button styles — display face for buttons is a signature choice */
 .btn {
-  @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200;
+  @apply inline-flex items-center justify-center px-4 py-2 text-sm font-display font-medium rounded-md transition-colors duration-200;
 }
 
 .btn-primary {
-  @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+  @apply btn bg-mistral-red text-white hover:bg-mistral-red-deep focus:ring-2 focus:ring-mistral-red focus:ring-offset-2;
+}
+
+.dark .btn-primary {
+  color: rgb(var(--color-mistral-surface));
 }
 
 .btn-secondary {
-  @apply btn bg-secondary-100 text-secondary-700 hover:bg-secondary-200 focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2;
+  @apply btn bg-mistral-band text-mistral-ink hover:bg-mistral-inset border border-mistral-border focus:ring-2 focus:ring-mistral-muted focus:ring-offset-2;
 }
 
 .btn-success {
-  @apply btn bg-green-600 text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2;
+  @apply btn bg-mistral-green text-white hover:opacity-90 focus:ring-2 focus:ring-mistral-green focus:ring-offset-2;
 }
 
 .btn-danger {
-  @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2;
+  @apply btn bg-mistral-red-deep text-white hover:opacity-90 focus:ring-2 focus:ring-mistral-red-deep focus:ring-offset-2;
 }
 
 .btn-outline {
-  @apply btn border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+  @apply btn border border-mistral-border-strong bg-white text-mistral-ink hover:border-mistral-ink focus:ring-2 focus:ring-mistral-muted focus:ring-offset-2;
 }
 
 .btn-ghost {
-  @apply btn text-gray-600 hover:bg-gray-100 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+  @apply btn text-mistral-muted hover:bg-mistral-band hover:text-mistral-ink focus:ring-2 focus:ring-mistral-muted focus:ring-offset-2;
 }
 
 .btn-sm {
@@ -101,70 +186,70 @@
   @apply px-6 py-3 text-base;
 }
 
-/* Form input styles */
+/* Form input styles — hairline border, ink focus */
 .input {
-  @apply block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white shadow-sm placeholder-gray-400;
-  @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
-  @apply disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed;
+  @apply block w-full px-3 py-2 text-sm border border-mistral-border-strong rounded-md bg-white placeholder-mistral-muted/70 text-mistral-ink;
+  @apply focus:outline-none focus:border-mistral-ink;
+  @apply disabled:bg-mistral-band disabled:text-mistral-muted disabled:cursor-not-allowed;
 }
 
 .input-error {
-  @apply border-red-500 focus:ring-red-500 focus:border-red-500;
+  @apply border-mistral-red-deep focus:border-mistral-red-deep;
 }
 
 .input-success {
-  @apply border-green-500 focus:ring-green-500 focus:border-green-500;
+  @apply border-mistral-green focus:border-mistral-green;
 }
 
 /* Label styles */
 .label {
-  @apply block text-sm font-medium text-gray-700 mb-1;
+  @apply block text-sm font-medium text-mistral-ink mb-1;
 }
 
-/* Badge styles */
+/* Badge styles — mono uppercase pills with joy-accent tints */
 .badge {
-  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  @apply inline-flex items-center px-2 py-0.5 rounded-sm border font-mono text-[11px] uppercase tracking-wide whitespace-nowrap;
 }
 
 .badge-primary {
-  @apply badge bg-primary-100 text-primary-800;
+  @apply badge bg-mistral-blue-tint border-mistral-blue/40 text-mistral-ink;
 }
 
 .badge-secondary {
-  @apply badge bg-secondary-100 text-secondary-800;
+  @apply badge bg-mistral-band border-mistral-border-strong text-mistral-muted;
 }
 
 .badge-success {
-  @apply badge bg-green-100 text-green-800;
+  @apply badge bg-mistral-green-tint border-mistral-green/50 text-mistral-ink;
 }
 
 .badge-warning {
-  @apply badge bg-yellow-100 text-yellow-800;
+  @apply badge bg-mistral-yellow-tint border-mistral-yellow/70 text-mistral-ink;
 }
 
 .badge-danger {
-  @apply badge bg-red-100 text-red-800;
+  @apply badge bg-mistral-red-tint border-mistral-red/60 text-mistral-ink;
 }
 
 .badge-info {
-  @apply badge bg-blue-100 text-blue-800;
+  @apply badge bg-mistral-blue-tint border-mistral-blue/40 text-mistral-ink;
 }
 
-/* Table styles */
+/* Table styles — spec-sheet look: hairlines + mono headers */
 .table {
-  @apply min-w-full divide-y divide-gray-200;
+  @apply min-w-full divide-y divide-mistral-border;
 }
 
 .table th {
-  @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50;
+  @apply px-6 py-3 text-left font-mono text-[11px] font-normal uppercase tracking-widest text-mistral-muted bg-mistral-band border-b border-mistral-border;
 }
 
 .table td {
-  @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;
+  @apply px-6 py-4 whitespace-nowrap text-sm text-mistral-ink;
 }
 
 .table tbody tr {
-  @apply bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors;
+  @apply bg-white border-b border-mistral-border hover:bg-mistral-surface transition-colors duration-200;
 }
 
 .table tbody tr:last-child {
@@ -177,23 +262,28 @@
 }
 
 .status-pending {
-  @apply status-indicator bg-yellow-400;
+  @apply status-indicator;
+  background-color: #fec835;
 }
 
 .status-processing {
-  @apply status-indicator bg-blue-400;
+  @apply status-indicator;
+  background-color: #0087e9;
 }
 
 .status-completed {
-  @apply status-indicator bg-green-400;
+  @apply status-indicator;
+  background-color: #45bf87;
 }
 
 .status-failed {
-  @apply status-indicator bg-red-400;
+  @apply status-indicator;
+  background-color: #f66c60;
 }
 
 .status-waiting {
-  @apply status-indicator bg-gray-400;
+  @apply status-indicator;
+  background-color: rgb(var(--color-mistral-muted));
 }
 
 /* Loading spinner */
@@ -245,6 +335,14 @@
   animation: slideDown 0.3s ease-out;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-slide-down {
+    animation: none;
+  }
+}
+
 /* Utility classes */
 .text-balance {
   text-wrap: balance;
@@ -257,7 +355,7 @@
 
 /* Responsive table container */
 .table-container {
-  @apply overflow-x-auto rounded-lg border border-gray-200;
+  @apply overflow-x-auto rounded-md border border-mistral-border;
 }
 
 /* Empty state */
@@ -266,34 +364,34 @@
 }
 
 .empty-state-icon {
-  @apply w-16 h-16 mx-auto mb-4 text-gray-400;
+  @apply w-16 h-16 mx-auto mb-4 text-mistral-muted;
 }
 
 .empty-state-title {
-  @apply text-lg font-medium text-gray-900 mb-2;
+  @apply font-display text-lg font-medium text-mistral-ink mb-2;
 }
 
 .empty-state-description {
-  @apply text-sm text-gray-500;
+  @apply text-sm text-mistral-muted;
 }
 
 /* Toast notification */
 .toast {
-  @apply fixed bottom-4 right-4 z-50 max-w-sm p-4 bg-white rounded-lg shadow-lg border border-gray-200;
+  @apply fixed bottom-4 right-4 z-50 max-w-sm p-4 bg-white rounded-md border border-mistral-border;
 }
 
 .toast-success {
-  @apply border-green-500 bg-green-50;
+  @apply border-mistral-green/50 bg-mistral-green-tint;
 }
 
 .toast-error {
-  @apply border-red-500 bg-red-50;
+  @apply border-mistral-red/60 bg-mistral-red-tint;
 }
 
 .toast-warning {
-  @apply border-yellow-500 bg-yellow-50;
+  @apply border-mistral-yellow/70 bg-mistral-yellow-tint;
 }
 
 .toast-info {
-  @apply border-blue-500 bg-blue-50;
+  @apply border-mistral-blue/40 bg-mistral-blue-tint;
 }

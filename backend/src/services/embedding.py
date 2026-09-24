@@ -229,7 +229,8 @@ class EmbeddingService:
         self,
         query: str,
         limit: int = 10,
-        min_similarity: float = 0.0
+        min_similarity: float = 0.0,
+        user_id: Optional[int] = None,
     ) -> List[Tuple[Comment, float]]:
         """
         Perform semantic search for comments similar to the query.
@@ -242,6 +243,7 @@ class EmbeddingService:
             query: Search query text
             limit: Maximum number of results
             min_similarity: Minimum similarity score (0-1)
+            user_id: Restrict results to comments owned by this user
 
         Returns:
             List of (comment, similarity_score) tuples, sorted by similarity
@@ -249,10 +251,13 @@ class EmbeddingService:
         try:
             query_embedding = await self.generate_embedding(query)
 
-            result = await self.db.execute(
+            statement = (
                 select(Comment, CommentEmbedding.embedding)
                 .join(CommentEmbedding, CommentEmbedding.comment_id == Comment.id)
             )
+            if user_id is not None:
+                statement = statement.where(Comment.user_id == user_id)
+            result = await self.db.execute(statement)
             rows = result.all()
 
             scored: List[Tuple[Comment, float]] = []

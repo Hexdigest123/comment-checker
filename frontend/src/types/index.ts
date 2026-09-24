@@ -45,17 +45,6 @@ export interface Comment {
   classifications?: Classification[];
 }
 
-export interface CommentSearchResult {
-  id: string;
-  text: string;
-  original_author: string | null;
-  source_url: string | null;
-  source_platform: string | null;
-  status: CommentStatus;
-  similarity: number;
-  created_at: string;
-}
-
 export type ClassificationBackend = 'typesafe' | 'mistral' | 'combined';
 export type ClassificationCategory =
   | 'hate'
@@ -138,6 +127,21 @@ export interface AIChatMessage {
   model?: string | null;
   tokens?: number | null;
   latency_ms?: number | null;
+}
+
+export interface AIConversationItem {
+  id: string;
+  user_id: string;
+  session_id: string;
+  role: string;
+  content: string;
+  tool_used: string;
+  tool_input?: Record<string, unknown> | null;
+  tool_output?: Record<string, unknown> | null;
+  response_model?: string | null;
+  response_tokens?: number | null;
+  latency_ms?: number | null;
+  created_at: string;
 }
 
 export interface AIChatResponse {

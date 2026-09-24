@@ -19,12 +19,22 @@ const { title = 'Comment Checker', fullBleed = false } = Astro.props;
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Comment Checker - Classify comments for hate speech and harmful content" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <script is:inline>
+    // Apply the theme before first paint to avoid a flash.
+    (function () {
+      var stored = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (stored === 'dark' || (!stored && prefersDark)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <title>{title}</title>
 </head>
-<body class="font-sans antialiased bg-mistral-surface text-mistral-ink">
+<body class="font-sans antialiased bg-mistral-surface text-mistral-ink transition-colors duration-300">
   <div class="min-h-screen flex flex-col">
     <!-- Navigation (client component: shows user state + logout) -->
     <NavBar client:only="react" />
@@ -41,10 +51,10 @@ const { title = 'Comment Checker', fullBleed = false } = Astro.props;
     )}
 
     {fullBleed ? null : (
-      <footer class="bg-white border-t border-gray-200 py-6">
+      <footer class="border-t border-mistral-border py-6">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div class="text-center text-gray-500 text-sm">
-            &copy; {new Date().getFullYear()} Comment Checker. All rights reserved.
+          <div class="text-center font-mono text-xs uppercase tracking-widest text-mistral-muted">
+            &copy; {new Date().getFullYear()} Comment Checker
           </div>
         </div>
       </footer>

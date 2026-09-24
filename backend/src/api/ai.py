@@ -38,6 +38,8 @@ async def chat_with_ai(
 
     The assistant answers in natural language and can call tools while
     composing its answer:
+    - filter_comments: structured search by classification category, severity,
+      status, date range or harmful score
     - semantic_search_comments: find comments by meaning (embeddings)
     - classify_text: classify a text through the moderation pipeline
     - get_dashboard_stats: aggregate statistics about the dataset
@@ -49,6 +51,7 @@ async def chat_with_ai(
             user_id=current_user.id,
             message=request.message,
             session_id=request.session_id,
+            is_admin=current_user.is_admin,
         )
     except Exception as e:
         logger.error(f"AI chat error: {e}")

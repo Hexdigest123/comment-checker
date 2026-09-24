@@ -105,7 +105,7 @@ const UploadPageContent = () => {
   if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+        <div className="animate-spin h-12 w-12 border-4 border-mistral-ink border-t-transparent rounded-full"></div>
       </div>
     );
   }
@@ -113,7 +113,7 @@ const UploadPageContent = () => {
   if (!isAuthenticated) {
     return (
       <div className="p-8">
-        <div className="bg-yellow-50 text-yellow-600 p-4 rounded-lg">
+        <div className="border border-mistral-border-strong bg-mistral-band text-mistral-ink p-4 rounded-md font-mono text-sm">
           Please login to upload files
         </div>
       </div>
@@ -123,18 +123,27 @@ const UploadPageContent = () => {
   return (
     <div className="p-8">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">Ingest Comments</h1>
+        {/* Section header */}
+        <div className="mb-8">
+          <span className="eyebrow-badge">Ingestion</span>
+          <h1 className="mt-3 font-display text-4xl font-semibold text-mistral-ink leading-tight">
+            Ingest <span className="marker-highlight">Comments</span>
+          </h1>
+          <p className="mt-2 text-sm text-mistral-muted">
+            Upload a CSV or pull comments straight from a social media post.
+          </p>
+        </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-gray-200 mb-6">
+        {/* Tabs — hairline underline style */}
+        <div className="flex border-b border-mistral-border mb-6">
           <button
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === 'csv' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            className={`px-4 py-2 font-display text-sm font-medium border-b-2 transition-colors duration-200 ${tab === 'csv' ? 'border-mistral-red text-mistral-ink' : 'border-transparent text-mistral-muted hover:text-mistral-ink'}`}
             onClick={() => setTab('csv')}
           >
             CSV Upload
           </button>
           <button
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === 'url' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            className={`px-4 py-2 font-display text-sm font-medium border-b-2 transition-colors duration-200 ${tab === 'url' ? 'border-mistral-red text-mistral-ink' : 'border-transparent text-mistral-muted hover:text-mistral-ink'}`}
             onClick={() => setTab('url')}
           >
             Import from Social Media URL
@@ -142,35 +151,35 @@ const UploadPageContent = () => {
         </div>
 
         {tab === 'csv' ? (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-6">{error}</div>}
-            {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-6">{success}</div>}
+          <div className="bg-white rounded-md border border-mistral-border p-6">
+            {error && <div className="border border-mistral-red/60 bg-mistral-red-tint text-mistral-ink p-3 rounded-md mb-6">{error}</div>}
+            {success && <div className="border border-mistral-green/50 bg-mistral-green-tint text-mistral-ink p-3 rounded-md mb-6">{success}</div>}
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">CSV File</label>
+                <label className="block font-mono text-xs uppercase tracking-widest text-mistral-muted mb-2">CSV File</label>
                 <Input type="file" accept=".csv" onChange={handleFileChange} ref={fileInputRef} required />
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-mistral-muted">
                   CSV file with comment text, optionally author, URL and platform columns
                 </p>
               </div>
 
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-medium text-gray-700 mb-2">CSV Format</h3>
-                <p className="text-sm text-gray-600 mb-2">Your CSV should have the following columns:</p>
-                <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                  <li><strong>text</strong> or <strong>comment</strong> - The comment text (required)</li>
-                  <li><strong>source_url</strong> or <strong>url</strong> - The source URL (optional)</li>
-                  <li><strong>user</strong> or <strong>author</strong> - The user who wrote the comment (optional)</li>
-                  <li><strong>platform</strong> - Social media platform (optional)</li>
-                  <li><strong>context</strong> - Context the comments react to (optional)</li>
+              <div className="bg-mistral-surface border border-mistral-border p-4 rounded-md">
+                <h3 className="font-display font-medium text-mistral-ink mb-2">CSV Format</h3>
+                <p className="text-sm text-mistral-muted mb-2">Your CSV should have the following columns:</p>
+                <ul className="list-disc list-inside text-sm text-mistral-muted space-y-1">
+                  <li><strong className="text-mistral-ink">text</strong> or <strong className="text-mistral-ink">comment</strong> - The comment text (required)</li>
+                  <li><strong className="text-mistral-ink">source_url</strong> or <strong className="text-mistral-ink">url</strong> - The source URL (optional)</li>
+                  <li><strong className="text-mistral-ink">user</strong> or <strong className="text-mistral-ink">author</strong> - The user who wrote the comment (optional)</li>
+                  <li><strong className="text-mistral-ink">platform</strong> - Social media platform (optional)</li>
+                  <li><strong className="text-mistral-ink">context</strong> - Context the comments react to (optional)</li>
                 </ul>
               </div>
 
               {results && (
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="font-medium text-blue-800 mb-2">Upload Results</h3>
-                  <p className="text-sm text-blue-700">
+                <div className="border border-mistral-blue/40 bg-mistral-blue-tint p-4 rounded-md">
+                  <h3 className="font-display font-medium text-mistral-ink mb-2">Upload Results</h3>
+                  <p className="text-sm text-mistral-muted">
                     Batch {results.batch_id}: {results.valid_rows} of {results.total_rows} rows
                     created valid comments. Classification is running in the background -
                     check the Comments page.
@@ -184,18 +193,18 @@ const UploadPageContent = () => {
             </form>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            {importError && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-6">{importError}</div>}
-            {importMessage && <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-6">{importMessage}</div>}
+          <div className="bg-white rounded-md border border-mistral-border p-6">
+            {importError && <div className="border border-mistral-red/60 bg-mistral-red-tint text-mistral-ink p-3 rounded-md mb-6">{importError}</div>}
+            {importMessage && <div className="border border-mistral-green/50 bg-mistral-green-tint text-mistral-ink p-3 rounded-md mb-6">{importMessage}</div>}
 
             {importStatus && !importStatus.configured && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-yellow-800 font-medium mb-1">
+              <div className="border border-mistral-yellow/70 bg-mistral-yellow-tint rounded-md p-4 mb-6">
+                <p className="text-sm text-mistral-ink font-medium mb-1">
                   ExportComments API key not configured
                 </p>
-                <p className="text-sm text-yellow-700">
-                  Set <code className="bg-yellow-100 px-1 rounded">EXPORTCOMMENTS_API_KEY</code> in the
-                  backend <code className="bg-yellow-100 px-1 rounded">.env</code> to enable direct URL import
+                <p className="text-sm text-mistral-muted">
+                  Set <code className="bg-mistral-inset px-1 rounded-sm font-mono text-xs">EXPORTCOMMENTS_API_KEY</code> in the
+                  backend <code className="bg-mistral-inset px-1 rounded-sm font-mono text-xs">.env</code> to enable direct URL import
                   (requires an ExportComments Premium/Business plan).
                 </p>
               </div>
@@ -203,20 +212,20 @@ const UploadPageContent = () => {
 
             <form onSubmit={handleImport} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Social media post / video URL</label>
+                <label className="block font-mono text-xs uppercase tracking-widest text-mistral-muted mb-2">Social media post / video URL</label>
                 <Input
                   type="url"
                   placeholder="https://www.instagram.com/p/..."
                   value={importUrl}
                   onChange={(e) => setImportUrl(e.target.value)}
                 />
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-mistral-muted">
                   Supported via ExportComments: {importStatus?.platforms?.slice(0, 6).join(', ') || 'instagram, youtube, facebook, tiktok, twitter, reddit'}...
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block font-mono text-xs uppercase tracking-widest text-mistral-muted mb-2">
                   Context (recommended for classification)
                 </label>
                 <Input
@@ -227,12 +236,12 @@ const UploadPageContent = () => {
                 />
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-gray-600">
+              <label className="flex items-center gap-2 text-sm text-mistral-muted">
                 <input
                   type="checkbox"
                   checked={includeReplies}
                   onChange={(e) => setIncludeReplies(e.target.checked)}
-                  className="rounded"
+                  className="rounded accent-mistral-red"
                 />
                 Include reply threads
               </label>
@@ -248,7 +257,7 @@ const UploadPageContent = () => {
               </Button>
             </form>
 
-            <p className="mt-4 text-xs text-gray-400">
+            <p className="mt-4 text-xs text-mistral-muted">
               The export runs in the background. Imported comments appear in the Comments
               table and are classified automatically by the worker.
             </p>

@@ -9,11 +9,12 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import or_, select, update, delete, desc, asc, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from ..db.models import Comment
 from ..db.models.comment import CommentStatus as CS, CommentPriority as CP
 from ..schemas import CommentUpdate, PageResponse, CommentListResponse
+from .classification import classification_to_response
 
 logger = logging.getLogger(__name__)
 
@@ -322,9 +323,10 @@ async def get_comments_paginated(
     query = select(DBComment).options(
         joinedload(DBComment.external_account),
         joinedload(DBComment.user),
+        selectinload(DBComment.classifications),
     )
     
-    if filter_condition:
+    if filter_condition is not None:
         query = query.where(filter_condition)
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
@@ -361,6 +363,10 @@ async def get_comments_paginated(
                 priority=c.priority.value,
                 processed_at=c.processed_at,
                 created_at=c.created_at,
+                classifications=[
+                    classification_to_response(cl).model_dump(mode="json")
+                    for cl in c.classifications
+                ] if c.classifications else None,
             )
             for c in comments
         ],

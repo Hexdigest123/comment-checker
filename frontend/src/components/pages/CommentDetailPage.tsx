@@ -14,6 +14,7 @@ const CommentDetailPageContent = ({ params }: CommentDetailPageProps) => {
   const [comment, setComment] = useState<Comment | null>(null);
   const [classifications, setClassifications] = useState<Classification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -76,10 +77,23 @@ const CommentDetailPageContent = ({ params }: CommentDetailPageProps) => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!comment || isDeleting) return;
+
+    setIsDeleting(true);
+    try {
+      await commentApi.delete(comment.id);
+      window.location.href = '/comments';
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete comment');
+      setIsDeleting(false);
+    }
+  };
+
   if (authLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+        <div className="animate-spin h-12 w-12 border-4 border-mistral-ink border-t-transparent rounded-full"></div>
       </div>
     );
   }
@@ -87,7 +101,7 @@ const CommentDetailPageContent = ({ params }: CommentDetailPageProps) => {
   if (!isAuthenticated) {
     return (
       <div className="p-8">
-        <div className="bg-yellow-50 text-yellow-600 p-4 rounded-lg">
+        <div className="border border-mistral-border-strong bg-mistral-band text-mistral-ink p-4 rounded-md font-mono text-sm">
           Please login to view comment details
         </div>
       </div>
@@ -97,7 +111,7 @@ const CommentDetailPageContent = ({ params }: CommentDetailPageProps) => {
   if (!comment) {
     return (
       <div className="p-8">
-        <div className="bg-red-50 text-red-600 p-4 rounded-lg">
+        <div className="border border-mistral-red/60 bg-mistral-red-tint text-mistral-ink p-4 rounded-md">
           Comment not found
         </div>
       </div>
@@ -107,44 +121,52 @@ const CommentDetailPageContent = ({ params }: CommentDetailPageProps) => {
   return (
     <div className="p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-800">Comment Details</h1>
-          <a href="/comments" className="text-blue-600 hover:text-blue-700 font-medium">
+        {/* Section header */}
+        <div className="flex justify-between items-start mb-8 gap-4 flex-wrap">
+          <div>
+            <span className="eyebrow-badge">Record</span>
+            <h1 className="mt-3 font-display text-4xl font-semibold text-mistral-ink leading-tight">Comment Details</h1>
+          </div>
+          <a
+            href="/comments"
+            className="group inline-flex items-center gap-2 font-display text-sm text-mistral-ink hover:text-mistral-red-deep transition-colors duration-300 mt-2"
+          >
+            <span className="inline-block transition-all duration-300 group-hover:-translate-x-1">←</span>
             Back to Comments
           </a>
         </div>
 
         {error && (
-          <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-6">
+          <div className="border border-mistral-red/60 bg-mistral-red-tint text-mistral-ink p-4 rounded-md mb-6">
             {error}
           </div>
         )}
 
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
-          <h2 className="text-xl font-semibold text-gray-700 mb-4">Comment Information</h2>
+        <div className="bg-white rounded-md border border-mistral-border p-6 mb-8">
+          <h2 className="font-display text-xl font-semibold text-mistral-ink mb-4">Comment Information</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Text</label>
-              <p className="text-gray-900">{comment.text}</p>
+              <label className="block font-mono text-[11px] uppercase tracking-widest text-mistral-muted mb-1">Text</label>
+              <p className="text-mistral-ink">{comment.text}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Status</label>
+              <label className="block font-mono text-[11px] uppercase tracking-widest text-mistral-muted mb-1">Status</label>
               <StatusBadge status={comment.status} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Source URL</label>
+              <label className="block font-mono text-[11px] uppercase tracking-widest text-mistral-muted mb-1">Source URL</label>
               {comment.source_url ? (
-                <a href={comment.source_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
+                <a href={comment.source_url} target="_blank" rel="noopener noreferrer" className="text-mistral-blue hover:text-mistral-red-deep transition-colors duration-200">
                   {comment.source_url}
                 </a>
               ) : (
-                <p className="text-gray-500">None</p>
+                <p className="text-mistral-muted">None</p>
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Created At</label>
-              <p className="text-gray-900">{new Date(comment.created_at).toLocaleString()}</p>
+              <label className="block font-mono text-[11px] uppercase tracking-widest text-mistral-muted mb-1">Created At</label>
+              <p className="text-mistral-ink">{new Date(comment.created_at).toLocaleString()}</p>
             </div>
           </div>
 
@@ -159,35 +181,38 @@ const CommentDetailPageContent = ({ params }: CommentDetailPageProps) => {
                 Reclassify
               </Button>
             )}
+            <Button variant="danger" onClick={handleDelete} isLoading={isDeleting}>
+              Delete
+            </Button>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border p-6">
+        <div className="bg-white rounded-md border border-mistral-border p-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-700">Classifications</h2>
-            <span className="text-sm text-gray-500">{classifications.length} total</span>
+            <h2 className="font-display text-xl font-semibold text-mistral-ink">Classifications</h2>
+            <span className="font-mono text-xs uppercase tracking-widest text-mistral-muted">{classifications.length} total</span>
           </div>
 
           {classifications.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">
+            <p className="text-mistral-muted text-center py-8">
               No classifications for this comment yet
             </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-mistral-band">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Backend</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Harmful Score</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Classified At</th>
+                    <th className="px-6 py-3 text-left font-mono text-[11px] font-normal uppercase tracking-widest text-mistral-muted border-b border-mistral-border">Backend</th>
+                    <th className="px-6 py-3 text-left font-mono text-[11px] font-normal uppercase tracking-widest text-mistral-muted border-b border-mistral-border">Category</th>
+                    <th className="px-6 py-3 text-left font-mono text-[11px] font-normal uppercase tracking-widest text-mistral-muted border-b border-mistral-border">Severity</th>
+                    <th className="px-6 py-3 text-left font-mono text-[11px] font-normal uppercase tracking-widest text-mistral-muted border-b border-mistral-border">Confidence</th>
+                    <th className="px-6 py-3 text-left font-mono text-[11px] font-normal uppercase tracking-widest text-mistral-muted border-b border-mistral-border">Harmful Score</th>
+                    <th className="px-6 py-3 text-left font-mono text-[11px] font-normal uppercase tracking-widest text-mistral-muted border-b border-mistral-border">Classified At</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white">
                   {classifications.map((classification) => (
-                    <tr key={classification.id} className="hover:bg-gray-50">
+                    <tr key={classification.id} className="border-b border-mistral-border last:border-b-0 hover:bg-mistral-surface transition-colors duration-200">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <BackendBadge backend={classification.backend} />
                       </td>
@@ -197,13 +222,13 @@ const CommentDetailPageContent = ({ params }: CommentDetailPageProps) => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <SeverityBadge severity={classification.severity || ''} />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap text-mistral-ink">
                         {((classification.confidence || 0) * 100).toFixed(1)}%
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap text-mistral-ink">
                         {(classification.harmful_score || 0).toFixed(2)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap font-mono text-xs text-mistral-muted">
                         {new Date(classification.created_at).toLocaleString()}
                       </td>
                     </tr>

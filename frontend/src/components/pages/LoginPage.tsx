@@ -40,15 +40,18 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-md p-8 w-full max-w-md">
+    <div className="min-h-screen bg-mistral-surface flex items-center justify-center p-4">
+      <div className="bg-white rounded-md border border-mistral-border p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">Comment Checker</h1>
-          <p className="text-gray-500 mt-2">Sign in to your account</p>
+          <span className="eyebrow-badge">Moderation console</span>
+          <h1 className="mt-4 font-display text-3xl font-semibold text-mistral-ink">
+            Comment <span className="marker-highlight">Checker</span>
+          </h1>
+          <p className="text-mistral-muted mt-2">Sign in to your account</p>
         </div>
 
         {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-6">
+          <div className="border border-mistral-red/60 bg-mistral-red-tint text-mistral-ink p-3 rounded-md mb-6">
             {error}
           </div>
         )}

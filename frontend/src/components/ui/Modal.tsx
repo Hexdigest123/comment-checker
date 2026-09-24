@@ -5,7 +5,7 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 }
 
 const sizeClasses = {
@@ -13,6 +13,7 @@ const sizeClasses = {
   md: 'max-w-md',
   lg: 'max-w-lg',
   xl: 'max-w-xl',
+  '2xl': 'max-w-2xl',
 };
 
 export const Modal: React.FC<ModalProps> = ({
@@ -48,21 +49,21 @@ export const Modal: React.FC<ModalProps> = ({
       onClick={onClose}
     >
       <div
-        className={`bg-white rounded-lg shadow-xl w-full ${sizeClasses[size]}`}
+        className={`bg-white rounded-md border border-mistral-border w-full ${sizeClasses[size]}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-6 border-b">
+        <div className="p-6 border-b border-mistral-border">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-800">{title}</h2>
+            <h2 className="font-display text-xl font-semibold text-mistral-ink">{title}</h2>
             <button
-              className="text-gray-500 hover:text-gray-700 text-2xl"
+              className="text-mistral-muted hover:text-mistral-ink text-2xl transition-colors duration-200"
               onClick={onClose}
             >
               &times;
             </button>
           </div>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-6 max-h-[70vh] overflow-y-auto">{children}</div>
       </div>
     </div>
   );

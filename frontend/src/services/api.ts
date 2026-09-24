@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
-import type { ApiError, CommentSearchResult, GraphData, AIChatResponse, ImportStatus } from '../types';
+import type { ApiError, GraphData, AIChatResponse, AIConversationItem, ImportStatus, PageResponse } from '../types';
 
 const api: AxiosInstance = axios.create({
   baseURL: import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1',
@@ -88,7 +88,16 @@ export const authApi = {
 
 // Comment API
 export const commentApi = {
-  list: (params?: { page?: number; page_size?: number; search?: string; status?: string; sort_by?: string; sort_order?: string }) =>
+  list: (params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    sort_by?: string;
+    sort_order?: string;
+    account_id?: string;
+    cluster_id?: string;
+  }) =>
     api.get('/comments', { params }),
 
   get: (id: string) => api.get(`/comments/${id}`),
@@ -110,11 +119,6 @@ export const commentApi = {
   classify: (id: string) => api.post(`/classifications/${id}/classify`),
 
   reclassify: (id: string) => api.post(`/classifications/${id}/classify`),
-
-  semanticSearch: (query: string, limit = 10) =>
-    api.get<CommentSearchResult[]>('/comments/search/semantic', {
-      params: { query, limit },
-    }),
 };
 
 // Classification API
@@ -144,8 +148,8 @@ export const aiApi = {
       session_id: sessionId,
     }),
 
-  conversations: (sessionId?: string) =>
-    api.get('/ai/conversations', { params: sessionId ? { session_id: sessionId } : {} }),
+  conversations: (params?: { session_id?: string; page?: number; page_size?: number }) =>
+    api.get<PageResponse<AIConversationItem>>('/ai/conversations', { params }),
 
   sessions: () => api.get<string[]>('/ai/sessions'),
 

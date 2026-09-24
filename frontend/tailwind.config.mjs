@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./src/**/*.{html,js,ts,jsx,tsx,astro}",
   ],
@@ -32,39 +33,45 @@ export default {
           900: '#0f172a',
           950: '#020617',
         },
-        // Mistral design system tokens (mistral.ai "cream paper" look)
+        // Cards/floating boxes: pure white on cream (light), steel-900 (dark).
+        // Driven by a CSS variable so every bg-white flips with the .dark class.
+        white: 'rgb(var(--color-white) / <alpha-value>)',
+        // Constant white for icons/text on colored fills (never flips).
+        purewhite: '#ffffff',
+        // Mistral design system tokens (mistral.ai "cream paper" look).
+        // All values are CSS variables so the .dark class flips the whole palette.
         mistral: {
           // Cream surfaces
-          surface: '#fbfbf8',        // page background
-          band: '#f5f4ef',          // subtle bands, badges, table head
-          inset: '#ebe9e0',         // inset panels
+          surface: 'rgb(var(--color-mistral-surface) / <alpha-value>)',
+          band: 'rgb(var(--color-mistral-band) / <alpha-value>)',
+          inset: 'rgb(var(--color-mistral-inset) / <alpha-value>)',
           // Hairline borders
-          border: '#e4e3de',
-          'border-strong': '#c9c9c4',
+          border: 'rgb(var(--color-mistral-border) / <alpha-value>)',
+          'border-strong': 'rgb(var(--color-mistral-border-strong) / <alpha-value>)',
           // Ink
-          ink: '#1a1a1a',
-          muted: '#6d6d78',
+          ink: 'rgb(var(--color-mistral-ink) / <alpha-value>)',
+          muted: 'rgb(var(--color-mistral-muted) / <alpha-value>)',
           // Signature persimmon red
           red: '#f66c60',
           'red-deep': '#e51300',
           // Joy accents (tags + highlights only)
           yellow: '#fec835',
-          'yellow-tint': '#fff4d2',
-          'yellow-highlight': '#ffe8a2',
+          'yellow-tint': 'rgb(var(--color-mistral-yellow-tint) / <alpha-value>)',
+          'yellow-highlight': 'rgb(var(--color-mistral-yellow-highlight) / <alpha-value>)',
           orange: '#ff6523',
-          'orange-tint': '#fff0eb',
+          'orange-tint': 'rgb(var(--color-mistral-orange-tint) / <alpha-value>)',
           pink: '#ff95de',
-          'pink-tint': '#ffe1f4',
+          'pink-tint': 'rgb(var(--color-mistral-pink-tint) / <alpha-value>)',
           green: '#45bf87',
-          'green-tint': '#e7f6ee',
+          'green-tint': 'rgb(var(--color-mistral-green-tint) / <alpha-value>)',
           blue: '#0087e9',
-          'blue-tint': '#e6f3fd',
-          'red-tint': '#ffeae8',
+          'blue-tint': 'rgb(var(--color-mistral-blue-tint) / <alpha-value>)',
+          'red-tint': 'rgb(var(--color-mistral-red-tint) / <alpha-value>)',
         },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['"Space Grotesk"', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['Archivo', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['"Space Mono"', 'ui-monospace', 'monospace'],
       },
     },

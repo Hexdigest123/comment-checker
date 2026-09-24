@@ -5,16 +5,16 @@ Comments API router
 import logging
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, status
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, select
 
 from ..config import get_settings
 from ..db.session import get_async_db
-from ..db.models import Comment, CommentStatus, CommentPriority, User
+from ..db.models import Comment, CommentStatus, CommentPriority, ExternalAccount, User
 from ..schemas import (
     CommentCreate,
     CommentUpdate,
@@ -49,6 +49,8 @@ async def list_comments(
     db: Annotated[AsyncSession, Depends(get_async_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
     params: PageParams = Depends(),
+    account_id: Optional[str] = Query(None, description="Filter by external account ID"),
+    cluster_id: Optional[str] = Query(None, description="Filter by cluster ID (comments from its accounts)"),
 ) -> PageResponse[CommentListResponse]:
     """
     List comments with pagination, search, sort, and filter.
@@ -92,6 +94,17 @@ async def list_comments(
         except ValueError:
             pass
     
+    # Entity graph filters: comments authored by an account, or by any account in a cluster
+    if account_id:
+        filter_conditions.append(Comment.external_account_id == account_id)
+
+    if cluster_id:
+        filter_conditions.append(
+            Comment.external_account_id.in_(
+                select(ExternalAccount.id).where(ExternalAccount.cluster_id == cluster_id)
+            )
+        )
+
     # Search filter
     if params.search:
         search_pattern = f"%{params.search}%"
@@ -104,7 +117,10 @@ async def list_comments(
                 Comment.source_url.ilike(search_pattern),
             ])
         filter_conditions.append(or_(*search_conditions))
-    combined_filter = and_(*filter_conditions) if filter_conditions else None
+    if filter_conditions:
+        combined_filter = and_(*filter_conditions) if len(filter_conditions) > 1 else filter_conditions[0]
+    else:
+        combined_filter = None
     
     result = await get_comments_paginated(
         db=db,
