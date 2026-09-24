@@ -8,17 +8,26 @@ for semantic search via PGVector.
 import uuid
 import asyncio
 import logging
-from datetime import datetime
 from typing import Optional, List, Tuple
 
 import httpx
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..db.models import Comment, CommentEmbedding
 
 logger = logging.getLogger(__name__)
+
+
+def _cosine_similarity(a: List[float], b: List[float]) -> float:
+    """Compute cosine similarity between two vectors."""
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(y * y for y in b) ** 0.5
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
 
 
 class EmbeddingService:
@@ -29,7 +38,7 @@ class EmbeddingService:
         self.settings = get_settings()
         self.client = httpx.AsyncClient(timeout=30.0)
         self.embedding_model = "mistral-embed"
-        self.embedding_dimension = 768
+        self.embedding_dimension = 1024
     
     async def generate_embedding(self, text: str) -> List[float]:
         """
@@ -55,8 +64,6 @@ class EmbeddingService:
             )
             response.raise_for_status()
             data = response.json()
-            
-            # Extract embedding from response
             if "data" in data and len(data["data"]) > 0:
                 return data["data"][0]["embedding"]
             else:
@@ -81,7 +88,6 @@ class EmbeddingService:
             CommentEmbedding instance or None if failed
         """
         try:
-            # Check if embedding already exists
             result = await self.db.execute(
                 select(CommentEmbedding).where(
                     CommentEmbedding.comment_id == comment.id
@@ -91,11 +97,8 @@ class EmbeddingService:
             
             if existing:
                 return existing
-            
-            # Generate embedding
             embedding = await self.generate_embedding(comment.text)
             
-            # Create and store embedding
             comment_embedding = CommentEmbedding(
                 id=str(uuid.uuid4()),
                 comment_id=comment.id,
@@ -117,39 +120,79 @@ class EmbeddingService:
     async def generate_embeddings_batch(
         self,
         comments: List[Comment],
-        batch_size: int = 10
+        batch_size: int = 32
     ) -> List[CommentEmbedding]:
         """
-        Generate embeddings for a batch of comments.
-        
+        Generate embeddings for a batch of comments using batched API calls.
+
+        Sends multiple texts per request to the Mistral embeddings endpoint
+        (which accepts a list of inputs) instead of one request per comment.
+        Falls back to per-comment requests if a batch fails.
+
         Args:
             comments: List of comments to generate embeddings for
-            batch_size: Number of comments to process at once
-            
+            batch_size: Number of texts per API request
+
         Returns:
             List of CommentEmbedding instances
         """
-        embeddings = []
-        
-        # Process in batches to avoid rate limiting
-        for i in range(0, len(comments), batch_size):
-            batch = comments[i:i + batch_size]
-            
-            # Generate embeddings for batch
-            batch_embeddings = []
-            for comment in batch:
-                embedding = await self.generate_and_store_embedding(comment)
-                if embedding:
-                    batch_embeddings.append(embedding)
-            
-            embeddings.extend(batch_embeddings)
-            
-            # Small delay between batches
-            if i + batch_size < len(comments):
-                await asyncio.sleep(0.1)
-        
+        embeddings: List[CommentEmbedding] = []
+
+        if not comments:
+            return embeddings
+
+        # Skip comments that already have an embedding
+        result = await self.db.execute(
+            select(CommentEmbedding).where(
+                CommentEmbedding.comment_id.in_([c.id for c in comments])
+            )
+        )
+        existing_ids = {e.comment_id for e in result.scalars().all()}
+        pending = [c for c in comments if c.id not in existing_ids]
+
+        for i in range(0, len(pending), batch_size):
+            batch = pending[i:i + batch_size]
+            try:
+                response = await self.client.post(
+                    "https://api.mistral.ai/v1/embeddings",
+                    headers={
+                        "Authorization": f"Bearer {self.settings.mistral_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": self.embedding_model,
+                        "input": [comment.text for comment in batch]
+                    }
+                )
+                response.raise_for_status()
+                data = sorted(response.json()["data"], key=lambda d: d["index"])
+
+                for comment, item in zip(batch, data):
+                    comment_embedding = CommentEmbedding(
+                        id=str(uuid.uuid4()),
+                        comment_id=comment.id,
+                        embedding=item["embedding"],
+                        model=self.embedding_model,
+                        dimension=self.embedding_dimension
+                    )
+                    self.db.add(comment_embedding)
+                    embeddings.append(comment_embedding)
+
+                await self.db.commit()
+
+            except Exception as e:
+                await self.db.rollback()
+                logger.error(
+                    f"Batched embedding request failed ({len(batch)} comments), "
+                    f"falling back to per-comment requests: {e}"
+                )
+                for comment in batch:
+                    embedding = await self.generate_and_store_embedding(comment)
+                    if embedding:
+                        embeddings.append(embedding)
+
         return embeddings
-    
+
     async def get_embedding(self, comment_id: str) -> Optional[CommentEmbedding]:
         """Get an embedding by comment ID."""
         result = await self.db.execute(
@@ -180,50 +223,49 @@ class EmbeddingService:
         """
         # Delete existing embedding
         await self.delete_embedding(comment.id)
-        
-        # Generate new embedding
         return await self.generate_and_store_embedding(comment)
     
     async def semantic_search(
         self,
         query: str,
         limit: int = 10,
-        min_similarity: float = 0.7
+        min_similarity: float = 0.0
     ) -> List[Tuple[Comment, float]]:
         """
         Perform semantic search for comments similar to the query.
-        
-        Uses PGVector's similarity operators to find the most similar comments.
-        
+
+        Embeddings are stored as float arrays (not pgvector), so cosine
+        similarity is computed in Python. Fetches stored embeddings, ranks
+        them against the query embedding, and returns the top matches.
+
         Args:
             query: Search query text
             limit: Maximum number of results
             min_similarity: Minimum similarity score (0-1)
-            
+
         Returns:
             List of (comment, similarity_score) tuples, sorted by similarity
         """
         try:
-            # Generate embedding for query
             query_embedding = await self.generate_embedding(query)
-            
-            # Execute vector similarity search
-            # Using cosine similarity (1 - cosine distance)
+
             result = await self.db.execute(
-                select(
-                    Comment,
-                    (1 - (CommentEmbedding.embedding.cosine_distance(query_embedding))) 
-                )
+                select(Comment, CommentEmbedding.embedding)
                 .join(CommentEmbedding, CommentEmbedding.comment_id == Comment.id)
-                .order_by(
-                    (1 - (CommentEmbedding.embedding.cosine_distance(query_embedding))).desc()
-                )
-                .limit(limit)
             )
-            
             rows = result.all()
-            return [(row[0], row[1]) for row in rows]
-            
+
+            scored: List[Tuple[Comment, float]] = []
+            for comment, embedding in rows:
+                if not embedding:
+                    continue
+                similarity = _cosine_similarity(query_embedding, embedding)
+                if similarity >= min_similarity:
+                    scored.append((comment, similarity))
+
+            scored.sort(key=lambda pair: pair[1], reverse=True)
+            return scored[:limit]
+
         except Exception as e:
             logger.error(f"Error in semantic search: {e}")
             return []
@@ -244,13 +286,10 @@ class EmbeddingService:
             List of (comment, score, source) tuples
             where source is 'semantic' or 'keyword'
         """
-        # Get semantic results
         semantic_results = await self.semantic_search(query, limit)
         
-        # Get keyword results (full-text search)
         keyword_results = await self._keyword_search(query, limit)
         
-        # Combine and deduplicate results
         combined = {}
         
         for comment, score in semantic_results:
@@ -264,8 +303,6 @@ class EmbeddingService:
                 existing_comment, existing_score, _ = combined[comment.id]
                 if score > existing_score:
                     combined[comment.id] = (comment, score, 'keyword')
-        
-        # Sort by score
         sorted_results = sorted(
             combined.values(),
             key=lambda x: x[1],

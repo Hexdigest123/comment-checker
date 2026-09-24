@@ -3,11 +3,9 @@ Account Clusters API router
 """
 
 import logging
-import uuid
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import or_, and_, desc, asc, select, func
@@ -15,7 +13,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from ..config import get_settings
 from ..db.session import get_async_db
-from ..db.models import AccountCluster, ClusterConnection, ExternalAccount
+from ..db.models import AccountCluster, ClusterConnection, User
 from ..db.models.account_cluster import ClusterTypeEnum, DiscoveryMethodEnum
 from ..db.models.cluster_connection import ConnectionTypeEnum, ConnectionStatusEnum
 from ..schemas import (
@@ -32,23 +30,44 @@ from ..schemas import (
     PageResponse,
 )
 from ..services.clustering import ClusteringService
-from ..api.auth import get_current_user, get_current_active_user, get_current_admin_user
+from ..api.auth import get_current_active_user, get_current_admin_user
 
-# Get settings
 settings = get_settings()
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
-# Create router
-router = APIRouter(prefix="/clusters", tags=["Clusters"])
+
+def _ev(v):
+    """Return the string value of an enum member or the value itself."""
+    return v.value if hasattr(v, "value") else v
+
+router = APIRouter(tags=["Clusters"])
+
+
+@router.get("/graph", response_model=ClusterGraphResponse)
+async def get_full_graph(
+    db: Annotated[AsyncSession, Depends(get_async_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+) -> ClusterGraphResponse:
+    """
+    Get the full entity graph: clusters, their accounts, and connections.
+
+    Returns nodes and links for force-directed graph visualization.
+    """
+    clustering_service = ClusteringService(db)
+    graph_data = await clustering_service.get_cluster_graph(None)
+
+    return ClusterGraphResponse(
+        nodes=graph_data["nodes"],
+        links=graph_data["links"]
+    )
 
 
 @router.get("/", response_model=PageResponse[ClusterListResponse])
 async def list_clusters(
-    params: PageParams = Depends(),
     db: Annotated[AsyncSession, Depends(get_async_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
+    params: PageParams = Depends(),
     cluster_type: Optional[str] = Query(None, description="Filter by cluster type"),
     discovery_method: Optional[str] = Query(None, description="Filter by discovery method"),
     search: Optional[str] = Query(None, description="Search in name and description"),
@@ -64,10 +83,8 @@ async def list_clusters(
     - Sort (sort_by, sort_order)
     - Filter by cluster_type, discovery_method, toxicity_score
     """
-    # Build filter conditions
     filter_conditions = []
     
-    # Cluster type filter
     if cluster_type:
         try:
             type_enum = ClusterTypeEnum(cluster_type.lower())
@@ -97,16 +114,11 @@ async def list_clusters(
         filter_conditions.append(AccountCluster.toxicity_score >= min_toxicity)
     if max_toxicity is not None:
         filter_conditions.append(AccountCluster.toxicity_score <= max_toxicity)
-    
-    # Combine all conditions
     combined_filter = and_(*filter_conditions) if filter_conditions else None
     
-    # Build query
     query = select(AccountCluster)
     if combined_filter:
         query = query.where(combined_filter)
-    
-    # Sort
     sort_by = params.sort_by or "toxicity_score"
     sort_order = params.sort_order or "desc"
     
@@ -130,16 +142,12 @@ async def list_clusters(
             query = query.order_by(asc(AccountCluster.toxicity_score))
         else:
             query = query.order_by(desc(AccountCluster.toxicity_score))
-    
-    # Count total
     count_query = select(func.count()).select_from(AccountCluster)
     if combined_filter:
         count_query = count_query.where(combined_filter)
     
     count_result = await db.execute(count_query)
     total = count_result.scalar() or 0
-    
-    # Get paginated results
     query = query.limit(params.page_size).offset((params.page - 1) * params.page_size)
     result = await db.execute(
         query.options(
@@ -149,17 +157,16 @@ async def list_clusters(
     )
     clusters = result.scalars().all()
     
-    # Build response
     items = []
     for cluster in clusters:
         items.append(ClusterListResponse(
             id=cluster.id,
             name=cluster.name,
             description=cluster.description,
-            cluster_type=cluster.cluster_type.value,
-            discovery_method=cluster.discovery_method.value,
+            cluster_type=_ev(cluster.cluster_type),
+            discovery_method=_ev(cluster.discovery_method),
             owner_id=cluster.owner_id,
-            owner_name=cluster.owner.name if cluster.owner else None,
+            owner_name=cluster.owner.full_name if cluster.owner else None,
             color=cluster.color,
             icon=cluster.icon,
             is_verified=cluster.is_verified,
@@ -171,12 +178,15 @@ async def list_clusters(
             updated_at=cluster.updated_at,
         ))
     
+    total_pages = (total + params.page_size - 1) // params.page_size if total > 0 else 0
     return PageResponse[ClusterListResponse](
         items=items,
         total=total,
         page=params.page,
         page_size=params.page_size,
-        pages=(total + params.page_size - 1) // params.page_size if total > 0 else 0
+        total_pages=total_pages,
+        has_next=params.page < total_pages,
+        has_previous=params.page > 1,
     )
 
 
@@ -200,10 +210,10 @@ async def get_cluster(
         id=cluster.id,
         name=cluster.name,
         description=cluster.description,
-        cluster_type=cluster.cluster_type.value,
-        discovery_method=cluster.discovery_method.value,
+        cluster_type=_ev(cluster.cluster_type),
+        discovery_method=_ev(cluster.discovery_method),
         owner_id=cluster.owner_id,
-        owner_name=cluster.owner.name if cluster.owner else None,
+        owner_name=cluster.owner.full_name if cluster.owner else None,
         color=cluster.color,
         icon=cluster.icon,
         is_verified=cluster.is_verified,
@@ -215,7 +225,7 @@ async def get_cluster(
         accounts=[
             {
                 "id": a.id,
-                "platform": a.platform.value,
+                "platform": _ev(a.platform),
                 "username": a.username,
                 "display_name": a.display_name,
                 "profile_url": a.profile_url,
@@ -231,9 +241,9 @@ async def get_cluster(
                 "cluster_a_id": c.cluster_a_id,
                 "cluster_b_id": c.cluster_b_id,
                 "cluster_b_name": c.cluster_b.name if c.cluster_b else None,
-                "connection_type": c.connection_type.value,
+                "connection_type": _ev(c.connection_type),
                 "confidence": c.confidence,
-                "status": c.status.value,
+                "status": _ev(c.status),
                 "created_at": c.created_at
             }
             for c in cluster.connections_out
@@ -244,9 +254,9 @@ async def get_cluster(
                 "cluster_a_id": c.cluster_a_id,
                 "cluster_a_name": c.cluster_a.name if c.cluster_a else None,
                 "cluster_b_id": c.cluster_b_id,
-                "connection_type": c.connection_type.value,
+                "connection_type": _ev(c.connection_type),
                 "confidence": c.confidence,
-                "status": c.status.value,
+                "status": _ev(c.status),
                 "created_at": c.created_at
             }
             for c in cluster.connections_in
@@ -264,14 +274,10 @@ async def create_cluster(
 ) -> ClusterResponse:
     """Create a new account cluster."""
     clustering_service = ClusteringService(db)
-    
-    # Validate cluster type
     try:
         cluster_type = ClusterTypeEnum(cluster_create.cluster_type.lower())
     except ValueError:
         cluster_type = ClusterTypeEnum.UNKNOWN
-    
-    # Validate discovery method
     try:
         discovery_method = DiscoveryMethodEnum(cluster_create.discovery_method.lower())
     except ValueError:
@@ -292,10 +298,10 @@ async def create_cluster(
         id=cluster.id,
         name=cluster.name,
         description=cluster.description,
-        cluster_type=cluster.cluster_type.value,
-        discovery_method=cluster.discovery_method.value,
+        cluster_type=_ev(cluster.cluster_type),
+        discovery_method=_ev(cluster.discovery_method),
         owner_id=cluster.owner_id,
-        owner_name=cluster.owner.name if cluster.owner else None,
+        owner_name=cluster.owner.full_name if cluster.owner else None,
         color=cluster.color,
         icon=cluster.icon,
         is_verified=cluster.is_verified,
@@ -307,7 +313,7 @@ async def create_cluster(
         accounts=[
             {
                 "id": a.id,
-                "platform": a.platform.value,
+                "platform": _ev(a.platform),
                 "username": a.username,
                 "display_name": a.display_name,
                 "profile_url": a.profile_url,
@@ -333,8 +339,6 @@ async def update_cluster(
 ) -> ClusterResponse:
     """Update a cluster."""
     clustering_service = ClusteringService(db)
-    
-    # Get existing cluster
     cluster = await clustering_service.get_cluster(cluster_id)
     
     if cluster is None:
@@ -342,8 +346,6 @@ async def update_cluster(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Cluster not found",
         )
-    
-    # Build update kwargs
     update_kwargs = {}
     if cluster_update.name:
         update_kwargs["name"] = cluster_update.name
@@ -377,10 +379,10 @@ async def update_cluster(
         id=cluster.id,
         name=cluster.name,
         description=cluster.description,
-        cluster_type=cluster.cluster_type.value,
-        discovery_method=cluster.discovery_method.value,
+        cluster_type=_ev(cluster.cluster_type),
+        discovery_method=_ev(cluster.discovery_method),
         owner_id=cluster.owner_id,
-        owner_name=cluster.owner.name if cluster.owner else None,
+        owner_name=cluster.owner.full_name if cluster.owner else None,
         color=cluster.color,
         icon=cluster.icon,
         is_verified=cluster.is_verified,
@@ -392,7 +394,7 @@ async def update_cluster(
         accounts=[
             {
                 "id": a.id,
-                "platform": a.platform.value,
+                "platform": _ev(a.platform),
                 "username": a.username,
                 "display_name": a.display_name,
                 "profile_url": a.profile_url,
@@ -408,9 +410,9 @@ async def update_cluster(
                 "cluster_a_id": c.cluster_a_id,
                 "cluster_b_id": c.cluster_b_id,
                 "cluster_b_name": c.cluster_b.name if c.cluster_b else None,
-                "connection_type": c.connection_type.value,
+                "connection_type": _ev(c.connection_type),
                 "confidence": c.confidence,
-                "status": c.status.value,
+                "status": _ev(c.status),
                 "created_at": c.created_at
             }
             for c in cluster.connections_out
@@ -421,9 +423,9 @@ async def update_cluster(
                 "cluster_a_id": c.cluster_a_id,
                 "cluster_a_name": c.cluster_a.name if c.cluster_a else None,
                 "cluster_b_id": c.cluster_b_id,
-                "connection_type": c.connection_type.value,
+                "connection_type": _ev(c.connection_type),
                 "confidence": c.confidence,
-                "status": c.status.value,
+                "status": _ev(c.status),
                 "created_at": c.created_at
             }
             for c in cluster.connections_in
@@ -455,9 +457,9 @@ async def delete_cluster(
 
 @router.get("/{cluster_id}/graph", response_model=ClusterGraphResponse)
 async def get_cluster_graph(
-    cluster_id: Optional[str] = None,
     db: Annotated[AsyncSession, Depends(get_async_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
+    cluster_id: Optional[str] = None,
 ) -> ClusterGraphResponse:
     """
     Get cluster graph data for visualization.
@@ -476,15 +478,11 @@ async def get_cluster_graph(
     )
 
 
-# =============================================================================
-# Cluster Connections API
-# =============================================================================
-
 @router.get("/connections", response_model=PageResponse[ConnectionListResponse])
 async def list_connections(
-    params: PageParams = Depends(),
     db: Annotated[AsyncSession, Depends(get_async_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
+    params: PageParams = Depends(),
     cluster_id: Optional[str] = Query(None, description="Filter by cluster ID"),
     status: Optional[str] = Query(None, description="Filter by connection status"),
     connection_type: Optional[str] = Query(None, description="Filter by connection type"),
@@ -497,8 +495,6 @@ async def list_connections(
     - Filter by cluster_id, status, connection_type
     """
     clustering_service = ClusteringService(db)
-    
-    # Build filter conditions
     filter_conditions = []
     
     if cluster_id:
@@ -522,8 +518,6 @@ async def list_connections(
             filter_conditions.append(ClusterConnection.connection_type == type_enum)
         except ValueError:
             pass
-    
-    # Combine all conditions
     combined_filter = and_(*filter_conditions) if filter_conditions else None
     
     connections, total = await clustering_service.get_connections(
@@ -533,7 +527,6 @@ async def list_connections(
         offset=(params.page - 1) * params.page_size
     )
     
-    # Build response items
     items = []
     for conn in connections:
         items.append(ConnectionListResponse(
@@ -542,9 +535,9 @@ async def list_connections(
             cluster_a_name=conn.cluster_a.name if conn.cluster_a else None,
             cluster_b_id=conn.cluster_b_id,
             cluster_b_name=conn.cluster_b.name if conn.cluster_b else None,
-            connection_type=conn.connection_type.value,
+            connection_type=_ev(conn.connection_type),
             confidence=conn.confidence,
-            status=conn.status.value,
+            status=_ev(conn.status),
             created_by_id=conn.created_by_id,
             created_by_name=conn.created_by.name if conn.created_by else None,
             evidence=conn.evidence,
@@ -594,9 +587,9 @@ async def get_connection(
         cluster_a_name=connection.cluster_a.name if connection.cluster_a else None,
         cluster_b_id=connection.cluster_b_id,
         cluster_b_name=connection.cluster_b.name if connection.cluster_b else None,
-        connection_type=connection.connection_type.value,
+        connection_type=_ev(connection.connection_type),
         confidence=connection.confidence,
-        status=connection.status.value,
+        status=_ev(connection.status),
         created_by_id=connection.created_by_id,
         created_by_name=connection.created_by.name if connection.created_by else None,
         evidence=connection.evidence,
@@ -616,8 +609,6 @@ async def create_connection(
 ) -> ConnectionResponse:
     """Create a new connection between two clusters."""
     clustering_service = ClusteringService(db)
-    
-    # Validate connection type
     try:
         connection_type = ConnectionTypeEnum(connection_create.connection_type.lower())
     except ValueError:
@@ -641,9 +632,9 @@ async def create_connection(
         cluster_a_name=connection.cluster_a.name if connection.cluster_a else None,
         cluster_b_id=connection.cluster_b_id,
         cluster_b_name=connection.cluster_b.name if connection.cluster_b else None,
-        connection_type=connection.connection_type.value,
+        connection_type=_ev(connection.connection_type),
         confidence=connection.confidence,
-        status=connection.status.value,
+        status=_ev(connection.status),
         created_by_id=connection.created_by_id,
         created_by_name=connection.created_by.name if connection.created_by else None,
         evidence=connection.evidence,
@@ -673,8 +664,6 @@ async def update_connection(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Connection not found",
         )
-    
-    # Update fields
     if connection_update.connection_type:
         try:
             connection.connection_type = ConnectionTypeEnum(connection_update.connection_type.lower())
@@ -701,9 +690,9 @@ async def update_connection(
         cluster_a_name=connection.cluster_a.name if connection.cluster_a else None,
         cluster_b_id=connection.cluster_b_id,
         cluster_b_name=connection.cluster_b.name if connection.cluster_b else None,
-        connection_type=connection.connection_type.value,
+        connection_type=_ev(connection.connection_type),
         confidence=connection.confidence,
-        status=connection.status.value,
+        status=_ev(connection.status),
         created_by_id=connection.created_by_id,
         created_by_name=connection.created_by.name if connection.created_by else None,
         evidence=connection.evidence,
@@ -731,8 +720,6 @@ async def confirm_connection(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Connection not found",
         )
-    
-    # Get updated connection
     result = await db.execute(
         select(ClusterConnection)
         .where(ClusterConnection.id == connection_id)
@@ -752,9 +739,9 @@ async def confirm_connection(
         cluster_a_name=connection.cluster_a.name if connection.cluster_a else None,
         cluster_b_id=connection.cluster_b_id,
         cluster_b_name=connection.cluster_b.name if connection.cluster_b else None,
-        connection_type=connection.connection_type.value,
+        connection_type=_ev(connection.connection_type),
         confidence=connection.confidence,
-        status=connection.status.value,
+        status=_ev(connection.status),
         created_by_id=connection.created_by_id,
         created_by_name=connection.created_by.name if connection.created_by else None,
         evidence=connection.evidence,

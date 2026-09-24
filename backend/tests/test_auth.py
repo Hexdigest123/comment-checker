@@ -15,7 +15,7 @@ class TestAuthLogin:
         """Test successful login with correct credentials."""
         response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         
         assert response.status_code == 200
@@ -24,14 +24,14 @@ class TestAuthLogin:
         assert 'token_type' in data
         assert data['token_type'] == 'bearer'
         assert 'user' in data
-        assert data['user']['email'] == test_user.email
+        assert data['user']['username'] == test_user.username
 
     @pytest.mark.asyncio
-    async def test_login_invalid_email(self, client):
-        """Test login with invalid email."""
+    async def test_login_invalid_username(self, client):
+        """Test login with invalid username."""
         response = client.post(
             '/auth/login',
-            json={'email': 'nonexistent@example.com', 'password': 'password'},
+            json={'username': 'nonexistent', 'password': 'password'},
         )
         
         assert response.status_code == 401
@@ -42,7 +42,7 @@ class TestAuthLogin:
         """Test login with invalid password."""
         response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'wrongpassword'},
+            json={'username': test_user.username, 'password': 'wrongpassword'},
         )
         
         assert response.status_code == 401
@@ -54,7 +54,7 @@ class TestAuthLogin:
         password_hash = get_password_hash('password')
         user = User(
             id='00000000-0000-0000-0000-000000000010',
-            email='inactive@example.com',
+            username='inactive',
             name='Inactive User',
             password_hash=password_hash,
             is_admin=False,
@@ -67,7 +67,7 @@ class TestAuthLogin:
 
         response = client.post(
             '/auth/login',
-            json={'email': user.email, 'password': 'password'},
+            json={'username': user.username, 'password': 'password'},
         )
         
         assert response.status_code == 401
@@ -75,7 +75,7 @@ class TestAuthLogin:
     @pytest.mark.asyncio
     async def test_login_missing_fields(self, client):
         """Test login with missing fields."""
-        response = client.post('/auth/login', json={'email': 'test@example.com'})
+        response = client.post('/auth/login', json={'username': 'testuser'})
         assert response.status_code == 422
         
         response = client.post('/auth/login', json={'password': 'password'})
@@ -91,7 +91,7 @@ class TestAuthMe:
         # Login first
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
@@ -104,7 +104,7 @@ class TestAuthMe:
         assert response.status_code == 200
         data = response.json()
         assert 'user' in data
-        assert data['user']['email'] == test_user.email
+        assert data['user']['username'] == test_user.username
 
     @pytest.mark.asyncio
     async def test_me_unauthenticated(self, client):
@@ -180,7 +180,7 @@ class TestAuthLogout:
         # Login first
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         access_token = login_response.json()['access_token']
         

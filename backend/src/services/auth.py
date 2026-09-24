@@ -4,6 +4,7 @@ Provides password hashing, verification, and JWT token utilities
 """
 
 import logging
+import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -12,10 +13,8 @@ from passlib.context import CryptContext
 
 from ..config import get_settings
 
-# Get settings
 settings = get_settings()
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
 # Password hashing context - OWASP: Use bcrypt
@@ -115,14 +114,15 @@ def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) 
         "exp": expire,
         "iat": datetime.utcnow(),
         "type": "refresh",
+        "jti": secrets.token_urlsafe(16),
     })
-    
+
     encoded_jwt = jwt.encode(
         to_encode,
         settings.jwt_secret_key,
         algorithm=settings.algorithm,
     )
-    
+
     return encoded_jwt
 
 

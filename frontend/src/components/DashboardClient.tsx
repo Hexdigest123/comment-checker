@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
 
 // Register ChartJS components
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
 
-// Define types
 interface DashboardSummary {
   total_comments: number;
   total_classifications: number;
@@ -55,15 +54,14 @@ const statusColors: Record<string, string> = {
 
 // Category colors
 const categoryColors: Record<string, string> = {
-  none: '#9ca3af',
-  incitement_to_crime: '#ef4444',
-  approval_of_arbitrary_action: '#f97316',
-  incitement_to_hatred: '#ea580c',
-  insult: '#eab308',
-  threat: '#dc2626',
-  glorification_of_nazism: '#7c2d12',
-  religious_defamation: '#7c3aed',
-  other: '#6b7280',
+  safe: '#10b981',
+  hate: '#ef4444',
+  harassment: '#f97316',
+  violence: '#7c3aed',
+  self_harm: '#6366f1',
+  sexual: '#ec4899',
+  spam: '#94a3b8',
+  illegal: '#0ea5e9',
 };
 
 // Date range options
@@ -87,7 +85,7 @@ const DashboardClient = () => {
       setLoading(true);
       setError(null);
       
-      const response = await axios.get(`/api/v1/dashboard/stats`, {
+      const response = await api.get('/dashboard/stats', {
         params: { date_range: range },
       });
       

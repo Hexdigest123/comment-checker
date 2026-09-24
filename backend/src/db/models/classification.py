@@ -2,9 +2,9 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Text, Float, DateTime, ForeignKey, JSON, func
+from sqlalchemy import String, Float, DateTime, ForeignKey, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
@@ -54,8 +54,7 @@ class Classification(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, index=True)
     
     # Comment being classified
-    comment_id: Mapped[str] = mapped_column(
-        String(36),
+    comment_id: Mapped[int] = mapped_column(
         ForeignKey("comments.id", ondelete="CASCADE"),
         nullable=False,
         index=True

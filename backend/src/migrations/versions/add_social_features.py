@@ -15,6 +15,9 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+revision = "0002_add_social_features"
+down_revision = "0001_initial"
+
 # Enums for new models
 platform_enum = postgresql.ENUM(
     'twitter', 'x', 'facebook', 'instagram', 'youtube', 'tiktok',
@@ -77,8 +80,6 @@ classification_severity_enum = postgresql.ENUM(
 
 def upgrade():
     """Create all new tables and update existing ones."""
-    
-    # Create enums
     platform_enum.create(op.get_bind())
     cluster_type_enum.create(op.get_bind())
     discovery_method_enum.create(op.get_bind())
@@ -91,10 +92,8 @@ def upgrade():
     classification_category_enum.create(op.get_bind())
     classification_severity_enum.create(op.get_bind())
 
-    # Enable PGVector extension
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
-    # Create external_accounts table
     op.create_table(
         'external_accounts',
         sa.Column('id', sa.String(length=36), primary_key=True, index=True),
@@ -116,7 +115,6 @@ def upgrade():
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
     )
 
-    # Create account_clusters table
     op.create_table(
         'account_clusters',
         sa.Column('id', sa.String(length=36), primary_key=True, index=True),
@@ -135,7 +133,6 @@ def upgrade():
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
     )
 
-    # Create cluster_connections table
     op.create_table(
         'cluster_connections',
         sa.Column('id', sa.String(length=36), primary_key=True, index=True),
@@ -153,7 +150,6 @@ def upgrade():
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
     )
 
-    # Create comment_embeddings table
     op.create_table(
         'comment_embeddings',
         sa.Column('id', sa.String(length=36), primary_key=True, index=True),
@@ -165,7 +161,6 @@ def upgrade():
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
     )
 
-    # Create ai_conversations table
     op.create_table(
         'ai_conversations',
         sa.Column('id', sa.String(length=36), primary_key=True, index=True),
@@ -182,45 +177,34 @@ def upgrade():
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
 
-    # Update comments table to add external account references
     with op.batch_alter_table('comments') as batch_op:
         batch_op.add_column(sa.Column('external_account_id', sa.String(length=36), sa.ForeignKey('external_accounts.id', ondelete='SET NULL'), index=True))
         batch_op.add_column(sa.Column('platform', sa.String(length=20), index=True))
         batch_op.add_column(sa.Column('platform_comment_id', sa.String(length=255), index=True))
-
-    # Update users table to add cluster relationship
     with op.batch_alter_table('users') as batch_op:
         pass  # Relationships are handled by SQLAlchemy, not migrations
-
-    # Create indexes for better query performance
     
-    # External accounts indexes
     op.create_index(op.f('ix_external_accounts_platform_username'), 'external_accounts', ['platform', 'username'], unique=True)
     op.create_index(op.f('ix_external_accounts_cluster_id'), 'external_accounts', ['cluster_id'])
     op.create_index(op.f('ix_external_accounts_platform'), 'external_accounts', ['platform'])
     op.create_index(op.f('ix_external_accounts_username_trgm'), 'external_accounts', sa.func.indexable_text('username'), postgresql_using='gin')
     op.create_index(op.f('ix_external_accounts_bio_trgm'), 'external_accounts', sa.func.indexable_text('bio'), postgresql_using='gin')
     
-    # Account clusters indexes
     op.create_index(op.f('ix_account_clusters_owner_id'), 'account_clusters', ['owner_id'])
     op.create_index(op.f('ix_account_clusters_type'), 'account_clusters', ['cluster_type'])
     op.create_index(op.f('ix_account_clusters_name_trgm'), 'account_clusters', sa.func.indexable_text('name'), postgresql_using='gin')
     
-    # Cluster connections indexes
     op.create_index(op.f('ix_cluster_connections_a_b'), 'cluster_connections', ['cluster_a_id', 'cluster_b_id'], unique=True)
     op.create_index(op.f('ix_cluster_connections_status'), 'cluster_connections', ['status'])
     op.create_index(op.f('ix_cluster_connections_created_by'), 'cluster_connections', ['created_by_id'])
     
-    # Comment embeddings indexes (PGVector)
     op.create_index(op.f('ix_comment_embeddings_vector'), 'comment_embeddings', sa.func.indexable_text('embedding'), postgresql_using='vector')
     op.create_index(op.f('ix_comment_embeddings_comment_id'), 'comment_embeddings', ['comment_id'])
     
-    # AI conversations indexes
     op.create_index(op.f('ix_ai_conversations_user_id'), 'ai_conversations', ['user_id'])
     op.create_index(op.f('ix_ai_conversations_session_id'), 'ai_conversations', ['session_id'])
     op.create_index(op.f('ix_ai_conversations_created_at'), 'ai_conversations', ['created_at'])
     
-    # Comments indexes for external account
     op.create_index(op.f('ix_comments_external_account'), 'comments', ['external_account_id'])
     op.create_index(op.f('ix_comments_platform'), 'comments', ['platform'])
 
@@ -259,8 +243,6 @@ def downgrade():
     op.drop_table('cluster_connections')
     op.drop_table('account_clusters')
     op.drop_table('external_accounts')
-    
-    # Remove columns from comments
     with op.batch_alter_table('comments') as batch_op:
         batch_op.drop_column('platform_comment_id')
         batch_op.drop_column('platform')

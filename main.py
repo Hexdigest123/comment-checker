@@ -12,7 +12,6 @@ from utils.csv import CSVReader
 from utils.llm import LLMClient
 from utils import logger
 
-# Optional import - only needed for direct API integration
 try:
     from utils.exportcomments import ExportCommentsClient
     HAS_EXPORTCOMMENTS = True
@@ -25,11 +24,6 @@ parser = argparse.ArgumentParser(
     prog="Comment Checker",
     description="Classify comments using Mistral pipeline or export directly from social media URLs",
 )
-
-
-def build_client(backend: str, context: str):
-    """Build the LLM classification client."""
-    return LLMClient(context=context)
 
 
 def classify_mistral(client, comment: str, threshold: float, fallback: bool = True):
@@ -69,7 +63,6 @@ def map_exportcomments_to_internal(df: pd.DataFrame) -> pd.DataFrame:
     This handles the column name differences between ExportComments exports
     and the internal format expected by the classification pipeline.
     """
-    # Define the mapping from ExportComments columns to internal columns
     column_mapping = {
         # Comment text
         "text": "Comment",
@@ -115,34 +108,25 @@ def map_exportcomments_to_internal(df: pd.DataFrame) -> pd.DataFrame:
         "image": "Thumbnail",
     }
     
-    # Reverse mapping: internal -> possible exportcomments columns
     reverse_map = {}
     for export_col, internal_col in column_mapping.items():
         if internal_col not in reverse_map:
             reverse_map[internal_col] = []
         reverse_map[internal_col].append(export_col)
     
-    # Create a new DataFrame with mapped columns
     mapped_data = {}
-    
-    # Map each internal column
     for internal_col, possible_export_cols in reverse_map.items():
-        # Try to find a matching column in the DataFrame
         for export_col in possible_export_cols:
-            # Check exact match
             if export_col in df.columns:
                 mapped_data[internal_col] = df[export_col]
                 break
-            # Check case-insensitive match
             for df_col in df.columns:
                 if df_col.lower().strip() == export_col.lower().strip():
                     mapped_data[internal_col] = df[df_col]
                     break
     
-    # Add any additional columns from the original that don't map
     for col in df.columns:
         col_lower = col.lower().strip()
-        # Skip if this column maps to an internal column we already have
         is_mapped = any(
             col_lower == ec.lower().strip() 
             for ec in column_mapping.keys()
@@ -182,7 +166,6 @@ def load_comments_from_url(
     
     client = ExportCommentsClient(api_key=api_key)
     
-    # Create a temporary file for the CSV
     with tempfile.NamedTemporaryFile(
         mode='w',
         suffix='.csv',
@@ -204,7 +187,6 @@ def load_comments_from_url(
         logger.info(f"Comments exported to temporary file: {tmp_path}")
         return tmp_path
     except Exception as e:
-        # Clean up temp file if it exists
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
         logger.fatal(f"Failed to export comments from URL: {e}")
@@ -228,22 +210,18 @@ def load_comments(
         DataFrame with comments in the expected format.
     """
     if url:
-        # Export from URL
         csv_path = load_comments_from_url(url, api_key=api_key, **export_kwargs)
         reader = CSVReader(csv_path)
         df = reader.df
         
-        # Clean up the temporary file
         try:
             os.unlink(csv_path)
         except OSError:
             pass
         
-        # Map columns to internal format
         df = map_exportcomments_to_internal(df)
         
     elif file_path:
-        # Load from CSV file
         full_path = os.path.join(os.getcwd(), file_path) if not os.path.isabs(file_path) else file_path
         if not os.path.exists(full_path):
             logger.fatal(f"Input file not found: {full_path}")
@@ -251,8 +229,6 @@ def load_comments(
         reader = CSVReader(full_path)
         df = reader.df
         
-        # Check if this looks like an ExportComments export
-        # If it has columns like 'text', 'username', etc., map them
         exportcolumns_indicators = ['text', 'username', 'author', 'timestamp']
         if any(col.lower() in df.columns for col in exportcolumns_indicators):
             df = map_exportcomments_to_internal(df)
@@ -264,8 +240,6 @@ def load_comments(
 
 
 def main():
-    """Main classification function."""
-    # Load comments from either file or URL
     df = load_comments(
         file_path=args.predict,
         url=args.export_url,
@@ -276,7 +250,7 @@ def main():
         poll_interval=args.poll_interval,
     )
 
-    client = build_client(args.backend, args.context)
+    client = LLMClient(context=args.context)
 
     df = df.head(args.max)
 
@@ -400,12 +374,10 @@ if __name__ == "__main__":
     )
     
     args = parser.parse_args()
-    
-    # Validate that at least one input source is provided
+
     if not args.predict and not args.export_url:
         parser.error("Either --predict (CSV file) or --export-url (social media URL) is required")
     
-    # Validate context is provided when not showing help
     if not args.context and args.export_url:
         parser.error("--context is required when using --export-url")
     

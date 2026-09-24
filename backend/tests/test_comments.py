@@ -16,7 +16,7 @@ class TestCommentsList:
         # Login
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
@@ -42,7 +42,7 @@ class TestCommentsList:
         # Login
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
@@ -66,7 +66,7 @@ class TestCommentsCreate:
         # Login
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
@@ -103,7 +103,7 @@ class TestCommentsGet:
         # Login
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
@@ -128,7 +128,7 @@ class TestCommentsGet:
         # Login
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
@@ -149,7 +149,7 @@ class TestCommentsUpdate:
         # Login
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
@@ -170,7 +170,7 @@ class TestCommentsUpdate:
         password_hash = get_password_hash('password')
         other_user = User(
             id='00000000-0000-0000-0000-000000000020',
-            email='other@example.com',
+            username='other',
             name='Other User',
             password_hash=password_hash,
             is_admin=False,
@@ -197,7 +197,7 @@ class TestCommentsUpdate:
         # Login as test_user
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
@@ -216,7 +216,7 @@ class TestCommentsUpdate:
         # Login
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
@@ -238,7 +238,7 @@ class TestCommentsDelete:
         # Login
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
@@ -263,7 +263,7 @@ class TestCommentsDelete:
         password_hash = get_password_hash('password')
         other_user = User(
             id='00000000-0000-0000-0000-000000000020',
-            email='other@example.com',
+            username='other',
             name='Other User',
             password_hash=password_hash,
             is_admin=False,
@@ -290,7 +290,7 @@ class TestCommentsDelete:
         # Login as test_user
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
@@ -308,7 +308,7 @@ class TestCommentsDelete:
         # Login
         login_response = client.post(
             '/auth/login',
-            json={'email': test_user.email, 'password': 'testpassword'},
+            json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         

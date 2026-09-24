@@ -13,27 +13,23 @@ import csv
 import io
 import logging
 import re
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
-from uuid import UUID
+import uuid
 
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from ..config import get_settings
-from ..db.models import Comment, CommentStatus, ExternalAccount, AccountCluster
+from ..db.models import CommentStatus, ExternalAccount
 from ..db.models.external_account import PlatformEnum as PE
 from ..services.comment import create_comment_batch
 from ..services.clustering import ClusteringService
 from ..services.embedding import EmbeddingService
 
-# Get settings
 settings = get_settings()
 
-# Configure logging
 logger = logging.getLogger(__name__)
-
 
 # CSV column mappings - maps common CSV column names to our model fields
 CSV_COLUMN_MAPPINGS = {
@@ -56,8 +52,6 @@ CSV_COLUMN_MAPPINGS = {
     "display_name": "display_name",
     "full name": "display_name",
     "full_name": "display_name",
-    
-    # Link/URL
     "link": "link",
     "url": "link",
     "profile url": "link",
@@ -101,10 +95,8 @@ def normalize_column_name(column_name: str) -> str:
     Returns:
         Normalized column name
     """
-    # Convert to lowercase and strip whitespace
     normalized = column_name.strip().lower()
     
-    # Remove special characters
     normalized = "".join(c if c.isalnum() or c in [" ", "_"] else "" for c in normalized)
     
     return normalized
@@ -124,7 +116,6 @@ def map_csv_columns(csv_columns: List[str]) -> Dict[str, str]:
     normalized_columns = [normalize_column_name(col) for col in csv_columns]
     
     for csv_col, normalized in zip(csv_columns, normalized_columns):
-        # Check if this column maps to any of our fields
         for csv_pattern, model_field in CSV_COLUMN_MAPPINGS.items():
             if normalize_column_name(csv_pattern) == normalized:
                 mapping[csv_col] = model_field
@@ -252,8 +243,6 @@ def extract_comment_from_row(
     extracted_link = None
     extracted_platform = None
     extracted_platform_user_id = None
-    
-    # Map each field
     for csv_col, model_field in column_mapping.items():
         if csv_col in row:
             value = row[csv_col].strip() if row[csv_col] else None
@@ -304,15 +293,12 @@ def extract_comment_from_row(
             "profile_url": extracted_link,
             "platform_user_id": extracted_platform_user_id,
         }
-        
-        # Set platform on comment
         if extracted_platform:
+            comment_data["source_platform"] = extracted_platform
             try:
                 comment_data["platform"] = PE(extracted_platform).value
             except ValueError:
                 comment_data["platform"] = "other"
-    
-    # Ensure text is present
     if "text" not in comment_data or not comment_data["text"]:
         return None
     
@@ -350,14 +336,11 @@ async def process_csv_file(
         - accounts_created: Number of new external accounts created
         - clusters_created: Number of new clusters created
     """
-    # Generate batch ID if not provided
     if batch_id is None:
-        batch_id = str(UUID().hex)
+        batch_id = str(uuid.uuid4().hex)
     
     # Read file content
     content = await file.read()
-    
-    # Detect encoding
     try:
         # Try UTF-8
         text_content = content.decode("utf-8")
@@ -370,11 +353,8 @@ async def process_csv_file(
     
     # Use StringIO to read CSV
     string_io = io.StringIO(text_content)
-    
-    # Detect delimiter
     delimiter = settings.csv_delimiter
     
-    # Read CSV
     try:
         csv_reader = csv.DictReader(string_io, delimiter=delimiter)
         rows = list(csv_reader)
@@ -391,16 +371,11 @@ async def process_csv_file(
             "accounts_created": 0,
             "clusters_created": 0,
         }
-    
-    # Map columns
     column_mapping = map_csv_columns(csv_reader.fieldnames)
     
     logger.info(f"CSV columns mapped: {column_mapping}")
-    
-    # Initialize services
     clustering_service = ClusteringService(db)
     
-    # Process rows
     valid_comments = []
     invalid_rows = 0
     accounts_created = 0
@@ -410,11 +385,9 @@ async def process_csv_file(
         comment_data = extract_comment_from_row(row, column_mapping, user_id, batch_id)
         
         if comment_data:
-            # Check if we have external account info
             external_account_info = comment_data.pop("external_account_info", None)
             
             if external_account_info:
-                # Get or create external account
                 platform = external_account_info.get("platform", "other")
                 username = external_account_info.get("username")
                 
@@ -422,8 +395,6 @@ async def process_csv_file(
                     platform_enum = PE(platform.lower())
                 except ValueError:
                     platform_enum = PE.OTHER
-                
-                # Find or create account
                 result = await db.execute(
                     select(ExternalAccount).where(
                         ExternalAccount.platform == platform_enum,
@@ -433,9 +404,8 @@ async def process_csv_file(
                 account = result.scalar_one_or_none()
                 
                 if not account:
-                    # Create new account
                     account = ExternalAccount(
-                        id=str(UUID()),
+                        id=str(uuid.uuid4()),
                         platform=platform_enum,
                         username=username,
                         display_name=external_account_info.get("display_name"),
@@ -463,25 +433,20 @@ async def process_csv_file(
                     account.cluster_id = cluster.id
                     db.add(account)
                     await db.commit()
-                
-                # Add account ID to comment
                 comment_data["external_account_id"] = account.id
                 
-                # Update cluster metadata
                 await clustering_service._update_cluster_metadata(cluster.id)
             
             valid_comments.append(comment_data)
         else:
             invalid_rows += 1
             logger.warning(f"Skipping invalid row {i + 1}")
-    
-    # Create comments in batch
     if valid_comments:
         comments = await create_comment_batch(db, valid_comments)
         comment_ids = [c.id for c in comments]
         
         # Optionally generate embeddings for comments
-        if settings.mistral_api_key:
+        if settings.mistral_api_key and settings.generate_embeddings:
             try:
                 embedding_service = EmbeddingService(db)
                 await embedding_service.generate_embeddings_batch(comments)

@@ -7,14 +7,13 @@ import uuid
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import or_, and_, desc, asc
+from sqlalchemy import or_, and_, desc, asc, select, func
 
 from ..config import get_settings
 from ..db.session import get_async_db
-from ..db.models import ExternalAccount, AccountCluster, PlatformEnum
+from ..db.models import ExternalAccount, AccountCluster, User
 from ..db.models.external_account import PlatformEnum as PE
 from ..schemas import (
     ExternalAccountCreate,
@@ -25,23 +24,25 @@ from ..schemas import (
     PageResponse,
 )
 from ..services.clustering import ClusteringService
-from ..api.auth import get_current_user, get_current_active_user, get_current_admin_user
+from ..api.auth import get_current_active_user, get_current_admin_user
 
-# Get settings
 settings = get_settings()
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
-# Create router
-router = APIRouter(prefix="/external-accounts", tags=["External Accounts"])
+
+def _ev(v):
+    """Return the string value of an enum member or the value itself."""
+    return v.value if hasattr(v, "value") else v
+
+router = APIRouter(tags=["External Accounts"])
 
 
 @router.get("/", response_model=PageResponse[ExternalAccountListResponse])
 async def list_external_accounts(
-    params: PageParams = Depends(),
     db: Annotated[AsyncSession, Depends(get_async_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
+    params: PageParams = Depends(),
     platform: Optional[str] = Query(None, description="Filter by platform"),
     cluster_id: Optional[str] = Query(None, description="Filter by cluster ID"),
     search: Optional[str] = Query(None, description="Search in username, display name, bio"),
@@ -56,11 +57,8 @@ async def list_external_accounts(
     - Filter by platform, cluster_id
     """
     from sqlalchemy import select, func
-    
-    # Build filter conditions
     filter_conditions = []
     
-    # Platform filter
     if platform:
         try:
             platform_enum = PE(platform.lower())
@@ -81,16 +79,11 @@ async def list_external_accounts(
             ExternalAccount.bio.ilike(search_pattern),
         ]
         filter_conditions.append(or_(*search_conditions))
-    
-    # Combine all conditions
     combined_filter = and_(*filter_conditions) if filter_conditions else None
     
-    # Build query
     query = select(ExternalAccount)
     if combined_filter:
         query = query.where(combined_filter)
-    
-    # Sort
     sort_by = params.sort_by or "created_at"
     sort_order = params.sort_order or "desc"
     
@@ -114,26 +107,21 @@ async def list_external_accounts(
             query = query.order_by(asc(ExternalAccount.created_at))
         else:
             query = query.order_by(desc(ExternalAccount.created_at))
-    
-    # Count total
     count_query = select(func.count()).select_from(ExternalAccount)
     if combined_filter:
         count_query = count_query.where(combined_filter)
     
     count_result = await db.execute(count_query)
     total = count_result.scalar() or 0
-    
-    # Get paginated results
     query = query.limit(params.page_size).offset((params.page - 1) * params.page_size)
     result = await db.execute(query)
     accounts = result.scalars().all()
     
-    # Build response
     items = []
     for account in accounts:
         items.append(ExternalAccountListResponse(
             id=account.id,
-            platform=account.platform.value,
+            platform=_ev(account.platform),
             platform_user_id=account.platform_user_id,
             username=account.username,
             display_name=account.display_name,
@@ -151,12 +139,15 @@ async def list_external_accounts(
             updated_at=account.updated_at,
         ))
     
+    total_pages = (total + params.page_size - 1) // params.page_size if total > 0 else 0
     return PageResponse[ExternalAccountListResponse](
         items=items,
         total=total,
         page=params.page,
         page_size=params.page_size,
-        pages=(total + params.page_size - 1) // params.page_size if total > 0 else 0
+        total_pages=total_pages,
+        has_next=params.page < total_pages,
+        has_previous=params.page > 1,
     )
 
 
@@ -180,7 +171,7 @@ async def get_external_account(
     
     return ExternalAccountResponse(
         id=account.id,
-        platform=account.platform.value,
+        platform=_ev(account.platform),
         platform_user_id=account.platform_user_id,
         username=account.username,
         display_name=account.display_name,
@@ -200,7 +191,7 @@ async def get_external_account(
             {
                 "id": c.id,
                 "text": c.text[:200] + "..." if len(c.text) > 200 else c.text,
-                "status": c.status.value,
+                "status": _ev(c.status),
                 "created_at": c.created_at
             }
             for c in account.comments
@@ -208,7 +199,7 @@ async def get_external_account(
         cluster={
             "id": account.cluster.id,
             "name": account.cluster.name,
-            "type": account.cluster.cluster_type.value,
+            "type": _ev(account.cluster.cluster_type),
             "toxicity_score": account.cluster.toxicity_score,
             "comment_count": account.cluster.comment_count
         } if account.cluster else None
@@ -222,13 +213,10 @@ async def create_external_account(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> ExternalAccountResponse:
     """Create a new external account."""
-    # Validate platform
     try:
         platform = PE(account_create.platform.lower())
     except ValueError:
         platform = PE.OTHER
-    
-    # Check if account already exists
     result = await db.execute(
         select(ExternalAccount).where(
             ExternalAccount.platform == platform,
@@ -242,8 +230,6 @@ async def create_external_account(
             status_code=status.HTTP_409_CONFLICT,
             detail="Account with this platform and username already exists",
         )
-    
-    # Create new account
     account = ExternalAccount(
         id=str(uuid.uuid4()),
         platform=platform,
@@ -264,10 +250,9 @@ async def create_external_account(
     await db.commit()
     await db.refresh(account)
     
-    # Auto-cluster by username/platform
     clustering_service = ClusteringService(db)
     await clustering_service.auto_cluster_by_username(
-        platform=platform.value,
+        platform=_ev(platform),
         username=account.username or "",
         user_id=current_user.id
     )
@@ -278,7 +263,7 @@ async def create_external_account(
     
     return ExternalAccountResponse(
         id=account.id,
-        platform=account.platform.value,
+        platform=_ev(account.platform),
         platform_user_id=account.platform_user_id,
         username=account.username,
         display_name=account.display_name,
@@ -317,8 +302,6 @@ async def update_external_account(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="External account not found",
         )
-    
-    # Update fields
     if account_update.platform:
         try:
             account.platform = PE(account_update.platform.lower())
@@ -356,7 +339,7 @@ async def update_external_account(
     
     return ExternalAccountResponse(
         id=account.id,
-        platform=account.platform.value,
+        platform=_ev(account.platform),
         platform_user_id=account.platform_user_id,
         username=account.username,
         display_name=account.display_name,
@@ -376,7 +359,7 @@ async def update_external_account(
             {
                 "id": c.id,
                 "text": c.text[:200] + "..." if len(c.text) > 200 else c.text,
-                "status": c.status.value,
+                "status": _ev(c.status),
                 "created_at": c.created_at
             }
             for c in account.comments
@@ -384,7 +367,7 @@ async def update_external_account(
         cluster={
             "id": account.cluster.id,
             "name": account.cluster.name,
-            "type": account.cluster.cluster_type.value
+            "type": _ev(account.cluster.cluster_type)
         } if account.cluster else None
     )
 
@@ -406,12 +389,9 @@ async def delete_external_account(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="External account not found",
         )
-    
-    # Remove from cluster (don't delete cluster)
     account.cluster_id = None
     await db.commit()
     
-    # Delete account
     await db.delete(account)
     await db.commit()
     
@@ -436,8 +416,6 @@ async def assign_account_to_cluster(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="External account not found",
         )
-    
-    # Check if cluster exists
     result = await db.execute(
         select(AccountCluster).where(AccountCluster.id == cluster_id)
     )
@@ -454,8 +432,6 @@ async def assign_account_to_cluster(
     db.add(account)
     await db.commit()
     await db.refresh(account)
-    
-    # Update cluster metadata
     clustering_service = ClusteringService(db)
     await clustering_service._update_cluster_metadata(cluster_id)
     
@@ -463,7 +439,7 @@ async def assign_account_to_cluster(
     
     return ExternalAccountResponse(
         id=account.id,
-        platform=account.platform.value,
+        platform=_ev(account.platform),
         platform_user_id=account.platform_user_id,
         username=account.username,
         display_name=account.display_name,
@@ -483,7 +459,7 @@ async def assign_account_to_cluster(
         cluster={
             "id": cluster.id,
             "name": cluster.name,
-            "type": cluster.cluster_type.value
+            "type": _ev(cluster.cluster_type)
         }
     )
 
@@ -516,8 +492,6 @@ async def remove_account_from_cluster(
     account.cluster_id = None
     db.add(account)
     await db.commit()
-    
-    # Update cluster metadata
     clustering_service = ClusteringService(db)
     await clustering_service._update_cluster_metadata(cluster_id)
     
@@ -527,7 +501,7 @@ async def remove_account_from_cluster(
     
     return ExternalAccountResponse(
         id=account.id,
-        platform=account.platform.value,
+        platform=_ev(account.platform),
         platform_user_id=account.platform_user_id,
         username=account.username,
         display_name=account.display_name,

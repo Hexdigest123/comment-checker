@@ -38,16 +38,10 @@ jobs:
           DB_USER=${{ secrets.DB_USER || 'comment_checker' }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD || 'dev_password' }}
           DB_NAME=${{ secrets.DB_NAME || 'comment_checker' }}
-          JWT_SECRET=${{ secrets.JWT_SECRET || 'dev_secret_change_in_production' }}
+          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY || 'dev_secret_change_in_production' }}
           MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY || '' }}
-          FIRST_ADMIN_EMAIL=${{ secrets.FIRST_ADMIN_EMAIL || 'admin@localhost' }}
+          FIRST_ADMIN_USERNAME=${{ secrets.FIRST_ADMIN_USERNAME || 'admin' }}
           FIRST_ADMIN_PASSWORD=${{ secrets.FIRST_ADMIN_PASSWORD || 'admin' }}
-          FIRST_ADMIN_NAME=${{ secrets.FIRST_ADMIN_NAME || 'Admin' }}
-          SMTP_HOST=${{ secrets.SMTP_HOST || 'mailpit' }}
-          SMTP_PORT=${{ secrets.SMTP_PORT || '1025' }}
-          SMTP_USER=${{ secrets.SMTP_USER || '' }}
-          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD || '' }}
-          EMAIL_FROM=${{ secrets.EMAIL_FROM || 'noreply@comment-checker.local' }}
           CORS_ORIGINS=${{ secrets.CORS_ORIGINS || '*' }}
           DEBUG=${{ secrets.DEBUG || 'false' }}
           EOF
@@ -55,19 +49,12 @@ jobs:
           # Create backend .env
           cat > backend/.env << 'EOF'
           DATABASE_URL=postgresql+asyncpg://${{ secrets.DB_USER || 'comment_checker' }}:${{ secrets.DB_PASSWORD || 'dev_password' }}@db:5432/${{ secrets.DB_NAME || 'comment_checker' }}
-          JWT_SECRET=${{ secrets.JWT_SECRET || 'dev_secret_change_in_production' }}
-          JWT_ALGORITHM=HS256
+          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY || 'dev_secret_change_in_production' }}
           ACCESS_TOKEN_EXPIRE_MINUTES=30
           REFRESH_TOKEN_EXPIRE_DAYS=7
           MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY || '' }}
-          SMTP_HOST=${{ secrets.SMTP_HOST || 'mailpit' }}
-          SMTP_PORT=${{ secrets.SMTP_PORT || '1025' }}
-          SMTP_USER=${{ secrets.SMTP_USER || '' }}
-          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD || '' }}
-          EMAIL_FROM=${{ secrets.EMAIL_FROM || 'noreply@comment-checker.local' }}
-          FIRST_ADMIN_EMAIL=${{ secrets.FIRST_ADMIN_EMAIL || 'admin@localhost' }}
+          FIRST_ADMIN_USERNAME=${{ secrets.FIRST_ADMIN_USERNAME || 'admin' }}
           FIRST_ADMIN_PASSWORD=${{ secrets.FIRST_ADMIN_PASSWORD || 'admin' }}
-          FIRST_ADMIN_NAME=${{ secrets.FIRST_ADMIN_NAME || 'Admin' }}
           CORS_ORIGINS=${{ secrets.CORS_ORIGINS || '*' }}
           DEBUG=${{ secrets.DEBUG || 'false' }}
           EOF

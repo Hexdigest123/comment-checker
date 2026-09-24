@@ -18,18 +18,15 @@ os.environ['JWT_ALGORITHM'] = 'HS256'
 os.environ['ACCESS_TOKEN_EXPIRE_MINUTES'] = '30'
 os.environ['REFRESH_TOKEN_EXPIRE_DAYS'] = '7'
 os.environ['MISTRAL_API_KEY'] = 'test-api-key'
-os.environ['FIRST_ADMIN_EMAIL'] = 'admin@test.com'
+os.environ['FIRST_ADMIN_USERNAME'] = 'admin'
 os.environ['FIRST_ADMIN_PASSWORD'] = 'admin'
-os.environ['FIRST_ADMIN_NAME'] = 'Admin'
-os.environ['SMTP_HOST'] = 'localhost'
-os.environ['SMTP_PORT'] = '1025'
 os.environ['CORS_ORIGINS'] = '*'
 os.environ['DEBUG'] = 'true'
 
 from src.main import app
 from src.db.base import Base
 from src.db.session import get_db
-from src.db.models import User, RefreshToken, InviteToken, Comment, Classification
+from src.db.models import User, RefreshToken, Comment, Classification
 from src.services.auth import get_password_hash
 
 # Create test database engine
@@ -102,7 +99,7 @@ async def test_user(db_session: AsyncSession) -> User:
     password_hash = get_password_hash('testpassword')
     user = User(
         id='00000000-0000-0000-0000-000000000001',
-        email='test@example.com',
+        username='testuser',
         name='Test User',
         password_hash=password_hash,
         is_admin=False,
@@ -123,7 +120,7 @@ async def test_admin(db_session: AsyncSession) -> User:
     password_hash = get_password_hash('adminpassword')
     user = User(
         id='00000000-0000-0000-0000-000000000002',
-        email='admin@example.com',
+        username='admin',
         name='Admin User',
         password_hash=password_hash,
         is_admin=True,
@@ -205,25 +202,6 @@ async def test_refresh_token(db_session: AsyncSession, test_user: User) -> Refre
         user_id=test_user.id,
         expires_at=datetime.utcnow() + timedelta(days=7),
         is_revoked=False,
-        created_at=datetime.utcnow(),
-    )
-    db_session.add(token)
-    await db_session.commit()
-    await db_session.refresh(token)
-    return token
-
-
-# Fixture to create a test invite token
-@pytest.fixture(scope='function')
-async def test_invite_token(db_session: AsyncSession, test_admin: User) -> InviteToken:
-    """Create a test invite token."""
-    token = InviteToken(
-        id='40000000-0000-0000-0000-000000000001',
-        token='test-invite-token',
-        email='invite@test.com',
-        is_used=False,
-        expires_at=datetime.utcnow() + timedelta(days=7),
-        created_by=test_admin.id,
         created_at=datetime.utcnow(),
     )
     db_session.add(token)

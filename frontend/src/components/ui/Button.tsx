@@ -1,7 +1,7 @@
 import { forwardRef, ButtonHTMLAttributes } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost' | 'link';
+  variant?: 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost' | 'link' | 'ink' | 'hairline';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
   fullWidth?: boolean;
@@ -14,6 +14,9 @@ const variantClasses = {
   outline: 'border border-gray-300 hover:border-gray-400 text-gray-700 bg-transparent',
   ghost: 'text-gray-700 hover:bg-gray-100 bg-transparent',
   link: 'text-blue-600 hover:text-blue-700 bg-transparent underline',
+  // Mistral design system
+  ink: 'bg-mistral-ink text-mistral-surface hover:bg-black',
+  hairline: 'border border-mistral-border-strong bg-white text-mistral-ink hover:border-mistral-ink',
 };
 
 const sizeClasses = {
@@ -44,6 +47,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       outline: 'focus:ring-gray-500',
       ghost: 'focus:ring-gray-500',
       link: 'focus:ring-blue-500',
+      ink: 'focus:ring-mistral-ink',
+      hairline: 'focus:ring-mistral-muted',
     };
 
     return (

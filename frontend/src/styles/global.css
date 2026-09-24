@@ -5,6 +5,31 @@
 
 /* Custom styles */
 
+/* ----- Mistral design system helpers ----- */
+
+/* Space Mono uppercase eyebrow (figure-caption style) */
+.eyebrow {
+  @apply inline-block font-mono text-xs uppercase tracking-widest text-mistral-muted;
+}
+
+/* Eyebrow inside a small badge */
+.eyebrow-badge {
+  @apply inline-block font-mono text-xs uppercase tracking-widest text-mistral-muted bg-mistral-band border border-mistral-border rounded-sm px-2 py-1;
+}
+
+/* Yellow marker highlight for one or two key words per page */
+.marker-highlight {
+  background-image: linear-gradient(to top, rgba(254, 200, 53, 0) 42%, #ffe8a2 42%, #ffe8a2 92%, rgba(254, 200, 53, 0) 92%);
+  padding: 0 0.15em;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrow-link .arrow {
+    transition: none !important;
+  }
+}
+
 /* Scrollbar styles */
 ::-webkit-scrollbar {
   width: 8px;

@@ -6,12 +6,6 @@ from datetime import datetime
 from typing import Optional, List, Dict
 from pydantic import BaseModel, Field, ConfigDict
 
-from .pagination import PageParams, PageResponse
-
-
-# =============================================================================
-# Cluster Schemas
-# =============================================================================
 
 class ClusterBase(BaseModel):
     """Base schema for account clusters."""
@@ -80,7 +74,7 @@ class ClusterResponse(ClusterBase):
     description: Optional[str] = None
     cluster_type: str
     discovery_method: str
-    owner_id: Optional[str] = Field(None, description="ID of the user who owns this cluster")
+    owner_id: Optional[int] = Field(None, description="ID of the user who owns this cluster")
     owner_name: Optional[str] = Field(None, description="Name of the user who owns this cluster")
     color: Optional[str] = None
     icon: Optional[str] = None
@@ -106,7 +100,7 @@ class ClusterListResponse(BaseModel):
     description: Optional[str] = None
     cluster_type: str
     discovery_method: str
-    owner_id: Optional[str] = None
+    owner_id: Optional[int] = None
     owner_name: Optional[str] = None
     color: Optional[str] = None
     icon: Optional[str] = None
@@ -148,10 +142,6 @@ class ClusterGraphResponse(BaseModel):
     nodes: List[ClusterGraphNode] = Field(default_factory=list)
     links: List[ClusterGraphLink] = Field(default_factory=list)
 
-
-# =============================================================================
-# Connection Schemas
-# =============================================================================
 
 class ConnectionBase(BaseModel):
     """Base schema for cluster connections."""
@@ -196,7 +186,7 @@ class ConnectionResponse(ConnectionBase):
     connection_type: str
     confidence: float
     status: str
-    created_by_id: Optional[str] = None
+    created_by_id: Optional[int] = None
     created_by_name: Optional[str] = None
     evidence: Optional[str] = None
     notes: Optional[str] = None
@@ -218,7 +208,7 @@ class ConnectionListResponse(BaseModel):
     connection_type: str
     confidence: float
     status: str
-    created_by_id: Optional[str] = None
+    created_by_id: Optional[int] = None
     created_by_name: Optional[str] = None
     evidence: Optional[str] = None
     notes: Optional[str] = None

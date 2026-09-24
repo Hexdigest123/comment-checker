@@ -1,2 +1,10 @@
 .env
 __pycache__
+
+node_modules/
+frontend/.astro/
+frontend/.vite/
+frontend/dist/
+.venv/
+.playwright-mcp/
+.token_tmp

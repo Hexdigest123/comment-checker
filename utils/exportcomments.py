@@ -8,7 +8,7 @@ for exporting comments from 20+ social media platforms.
 import os
 import requests
 import time
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from utils import logger
 
 
@@ -16,35 +16,6 @@ class ExportCommentsClient:
     """Client for interacting with ExportComments.com API."""
 
     BASE_URL = "https://exportcomments.com/api/v3"
-    
-    # Column mapping from ExportComments format to internal format
-    COLUMN_MAPPING = {
-        # ExportComments columns -> internal columns
-        "text": "Comment",
-        "username": "Username",
-        "author": "Username",
-        "user": "Username",
-        "name": "Name",
-        "timestamp": "Date",
-        "created_at": "Date",
-        "date": "Date",
-        "likes": "Likes",
-        "like_count": "Likes",
-        "replies": "Replies",
-        "reply_count": "Replies",
-        "url": "Comment URL",
-        "permalink": "Comment URL",
-        "comment_url": "Comment URL",
-        "profile_url": "Profile URL",
-        "user_url": "Profile URL",
-        "avatar": "Thumbnail",
-        "thumbnail": "Thumbnail",
-        "image": "Thumbnail",
-        "user_id": "Profile ID",
-        "author_id": "Profile ID",
-        "id": "Comment ID",
-        "comment_id": "Comment ID",
-    }
 
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the ExportComments client.
@@ -231,55 +202,8 @@ class ExportCommentsClient:
         job_id = job.get("id")
         guid = job.get("guid")
         job_identifier = guid or str(job_id)
-        
-        # Download the results
+
         self.download_job(job_identifier, output_path)
-        
+
         return output_path
 
-    def map_columns_to_internal(self, df) -> Dict[str, str]:
-        """Map ExportComments CSV columns to internal format.
-        
-        Args:
-            df: Pandas DataFrame with ExportComments columns.
-            
-        Returns:
-            Dictionary mapping internal column names to ExportComments column names.
-        """
-        # Find which ExportComments columns exist in the DataFrame
-        reverse_mapping = {v: k for k, v in self.COLUMN_MAPPING.items()}
-        
-        available_columns = set(df.columns)
-        internal_to_export = {}
-        
-        for internal_col, export_col in self.COLUMN_MAPPING.items():
-            # Try exact match first
-            if export_col in available_columns:
-                internal_to_export[internal_col] = export_col
-            else:
-                # Try to find a matching column
-                for df_col in available_columns:
-                    df_col_lower = df_col.lower().strip()
-                    export_col_lower = export_col.lower().strip()
-                    if df_col_lower == export_col_lower:
-                        internal_to_export[internal_col] = df_col
-                        break
-        
-        return internal_to_export
-
-    def validate_api_key(self) -> bool:
-        """Validate that the API key is set and working.
-        
-        Returns:
-            True if API key is valid, False otherwise.
-        """
-        if not self.api_key:
-            return False
-        
-        # Test with a simple status check
-        try:
-            # Try to list jobs (requires auth)
-            self._request("GET", "/jobs")
-            return True
-        except Exception:
-            return False

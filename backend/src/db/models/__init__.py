@@ -1,11 +1,14 @@
 """Database models."""
 
 from .user import User
-from .refresh_token import RefreshToken
-from .invite_token import InviteToken
-from .password_reset_token import PasswordResetToken
-from .comment import Comment
-from .classification import Classification
+from .token import RefreshToken, TokenStatus
+from .comment import Comment, CommentStatus, CommentPriority
+from .classification import (
+    Classification,
+    ClassificationBackend,
+    ClassificationCategory,
+    ClassificationSeverity,
+)
 from .external_account import ExternalAccount, PlatformEnum
 from .account_cluster import AccountCluster, ClusterTypeEnum, DiscoveryMethodEnum
 from .cluster_connection import ClusterConnection, ConnectionTypeEnum, ConnectionStatusEnum
@@ -16,11 +19,15 @@ __all__ = [
     # Users and authentication
     "User",
     "RefreshToken",
-    "InviteToken",
-    "PasswordResetToken",
+    "TokenStatus",
     # Content
     "Comment",
+    "CommentStatus",
+    "CommentPriority",
     "Classification",
+    "ClassificationBackend",
+    "ClassificationCategory",
+    "ClassificationSeverity",
     # Social media
     "ExternalAccount",
     "PlatformEnum",

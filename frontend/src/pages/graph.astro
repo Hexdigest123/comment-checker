@@ -1,0 +1,8 @@
+---
+import RootLayout from '../layouts/RootLayout.astro';
+import GraphPage from '../components/pages/GraphPage';
+---
+
+<RootLayout title="Entity Graph - Comment Checker">
+  <GraphPage client:only="react" />
+</RootLayout>

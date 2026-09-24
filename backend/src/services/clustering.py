@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from typing import Optional, List
 
-from sqlalchemy import select, func, or_, and_
+from sqlalchemy import select, update, delete, func, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -21,8 +21,6 @@ from ..db.models import (
     AccountCluster,
     ClusterConnection,
     Comment,
-    Classification,
-    User,
     PlatformEnum,
     ClusterTypeEnum,
     DiscoveryMethodEnum,
@@ -71,8 +69,6 @@ class ClusteringService:
         
         if account:
             return account
-        
-        # Create new account
         account = ExternalAccount(
             id=str(uuid.uuid4()),
             platform=platform_enum,
@@ -109,10 +105,10 @@ class ClusteringService:
             platform_enum = PE(platform.lower())
         except ValueError:
             platform_enum = PE.OTHER
-        
-        # Find all accounts with this username on this platform
         result = await self.db.execute(
-            select(ExternalAccount).where(
+            select(ExternalAccount)
+            .options(selectinload(ExternalAccount.cluster))
+            .where(
                 ExternalAccount.platform == platform_enum,
                 ExternalAccount.username == username
             )
@@ -133,8 +129,6 @@ class ClusteringService:
             await self.db.commit()
             await self.db.refresh(cluster)
             return cluster
-        
-        # Check if any account already has a cluster
         existing_cluster = None
         for account in accounts:
             if account.cluster_id:
@@ -145,7 +139,6 @@ class ClusteringService:
             # Use existing cluster
             cluster = existing_cluster
         else:
-            # Create new cluster
             cluster = AccountCluster(
                 id=str(uuid.uuid4()),
                 name=username,
@@ -158,7 +151,6 @@ class ClusteringService:
             await self.db.commit()
             await self.db.refresh(cluster)
         
-        # Assign all accounts to this cluster
         for account in accounts:
             if account.cluster_id != cluster.id:
                 account.cluster_id = cluster.id
@@ -166,8 +158,6 @@ class ClusteringService:
         
         await self.db.commit()
         await self.db.refresh(cluster)
-        
-        # Update cluster metadata
         await self._update_cluster_metadata(cluster.id)
         
         return cluster
@@ -207,8 +197,6 @@ class ClusteringService:
         self.db.add(cluster)
         await self.db.commit()
         await self.db.refresh(cluster)
-        
-        # Add accounts to cluster if provided
         if account_ids:
             result = await self.db.execute(
                 select(ExternalAccount).where(ExternalAccount.id.in_(account_ids))
@@ -259,8 +247,6 @@ class ClusteringService:
         """
         query = select(AccountCluster)
         count_query = select(func.count()).select_from(AccountCluster)
-        
-        # Apply filters
         conditions = []
         if owner_id:
             conditions.append(AccountCluster.owner_id == owner_id)
@@ -277,12 +263,9 @@ class ClusteringService:
         if conditions:
             query = query.where(and_(*conditions))
             count_query = count_query.where(and_(*conditions))
-        
-        # Get count
         count_result = await self.db.execute(count_query)
         total = count_result.scalar() or 0
         
-        # Get results
         query = query.order_by(AccountCluster.created_at.desc())
         query = query.limit(limit).offset(offset)
         
@@ -379,7 +362,6 @@ class ClusteringService:
         Returns:
             ClusterConnection instance
         """
-        # Check if connection already exists
         result = await self.db.execute(
             select(ClusterConnection).where(
                 or_(
@@ -397,7 +379,6 @@ class ClusteringService:
         existing = result.scalar_one_or_none()
         
         if existing:
-            # Update existing connection
             existing.connection_type = connection_type
             existing.confidence = confidence
             existing.evidence = evidence
@@ -408,7 +389,6 @@ class ClusteringService:
             await self.db.refresh(existing)
             return existing
         
-        # Create new connection
         connection = ClusterConnection(
             id=str(uuid.uuid4()),
             cluster_a_id=cluster_a_id,
@@ -451,12 +431,9 @@ class ClusteringService:
         if conditions:
             query = query.where(and_(*conditions))
             count_query = count_query.where(and_(*conditions))
-        
-        # Get count
         count_result = await self.db.execute(count_query)
         total = count_result.scalar() or 0
         
-        # Get results
         query = query.order_by(ClusterConnection.created_at.desc())
         query = query.limit(limit).offset(offset)
         
@@ -529,12 +506,9 @@ class ClusteringService:
         if conditions:
             query = query.where(and_(*conditions))
             count_query = count_query.where(and_(*conditions))
-        
-        # Get count
         count_result = await self.db.execute(count_query)
         total = count_result.scalar() or 0
         
-        # Get results
         query = query.order_by(ExternalAccount.created_at.desc())
         query = query.limit(limit).offset(offset)
         
@@ -554,19 +528,20 @@ class ClusteringService:
         
         Returns a dict with nodes and links for D3.js or similar.
         """
-        # Get clusters
         clusters_result = await self.db.execute(
-            select(AccountCluster)
+            select(AccountCluster).options(
+                selectinload(AccountCluster.accounts).selectinload(
+                    ExternalAccount.comments
+                )
+            )
         )
         clusters = clusters_result.scalars().all()
         
-        # Get connections
         connections_result = await self.db.execute(
             select(ClusterConnection)
         )
         connections = connections_result.scalars().all()
         
-        # Build nodes
         nodes = []
         cluster_map = {}
         
@@ -585,44 +560,39 @@ class ClusteringService:
                 "id": cluster.id,
                 "name": cluster.name,
                 "type": "cluster",
-                "cluster_type": cluster.cluster_type.value,
+                "cluster_type": cluster.cluster_type.value if hasattr(cluster.cluster_type, "value") else cluster.cluster_type,
                 "comment_count": cluster.comment_count,
                 "toxicity_score": cluster.toxicity_score,
                 "color": cluster.color,
                 "icon": cluster.icon,
                 "index": len(nodes)
             })
-            
-            # Add accounts as nodes
             for account in cluster.accounts:
                 nodes.append({
                     "id": account.id,
                     "name": account.username or account.display_name or "Unknown",
                     "type": "account",
-                    "platform": account.platform.value,
+                    "platform": account.platform.value if hasattr(account.platform, "value") else account.platform,
                     "cluster_id": cluster.id,
                     "comment_count": len(account.comments),
                     "color": cluster.color,
                     "index": len(nodes)
                 })
-        
-        # Build links
         links = []
-        
-        # Links between clusters
+
         for connection in connections:
             if cluster_id:
-                if (connection.cluster_a_id != cluster_id and 
+                if (connection.cluster_a_id != cluster_id and
                     connection.cluster_b_id != cluster_id):
                     continue
-            
+
             links.append({
                 "source": cluster_map.get(connection.cluster_a_id),
                 "target": cluster_map.get(connection.cluster_b_id),
                 "type": "connection",
-                "connection_type": connection.connection_type.value,
+                "connection_type": connection.connection_type.value if hasattr(connection.connection_type, "value") else connection.connection_type,
                 "confidence": connection.confidence,
-                "status": connection.status.value
+                "status": connection.status.value if hasattr(connection.status, "value") else connection.status
             })
         
         # Links from accounts to their clusters
@@ -631,7 +601,6 @@ class ClusteringService:
                 continue
             
             for account in cluster.accounts:
-                # Find account node index
                 account_index = None
                 for i, node in enumerate(nodes):
                     if node["id"] == account.id:
@@ -659,18 +628,16 @@ class ClusteringService:
         
         if not cluster:
             return
-        
-        # Get all comments in this cluster
         result = await self.db.execute(
             select(Comment)
+            .options(selectinload(Comment.classifications))
             .join(ExternalAccount, Comment.external_account_id == ExternalAccount.id)
             .where(ExternalAccount.cluster_id == cluster_id)
         )
         comments = result.scalars().all()
-        
+
         cluster.comment_count = len(comments)
         
-        # Calculate average toxicity
         if comments:
             total_toxicity = 0
             count = 0
@@ -681,11 +648,12 @@ class ClusteringService:
                         count += 1
             if count > 0:
                 cluster.toxicity_score = total_toxicity / count
-        
-        # Update last activity
         if comments:
             latest_comment = max(comments, key=lambda c: c.created_at)
-            cluster.last_activity_at = latest_comment.created_at
+            latest_at = latest_comment.created_at
+            if latest_at.tzinfo is not None:
+                latest_at = latest_at.replace(tzinfo=None)
+            cluster.last_activity_at = latest_at
         
         self.db.add(cluster)
         await self.db.commit()
@@ -707,8 +675,6 @@ class ClusteringService:
         account.cluster_id = cluster_id
         self.db.add(account)
         await self.db.commit()
-        
-        # Update cluster metadata
         await self._update_cluster_metadata(cluster_id)
         
         return True
@@ -727,8 +693,6 @@ class ClusteringService:
         account.cluster_id = None
         self.db.add(account)
         await self.db.commit()
-        
-        # Update cluster metadata
         await self._update_cluster_metadata(cluster_id)
         
         return True

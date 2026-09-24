@@ -5,7 +5,7 @@ Dashboard API router
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,26 +19,23 @@ from ..schemas import (
     StatusDistributionResponse,
 )
 from ..services.dashboard import get_dashboard_stats
-from ..api.auth import get_current_user, get_current_active_user, get_current_admin_user
+from ..api.auth import get_current_active_user
 
-# Get settings
 settings = get_settings()
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
-# Create router
-router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+router = APIRouter(tags=["Dashboard"])
 
 
 @router.get("/stats", response_model=DashboardStatsResponse)
 async def get_dashboard_stats_endpoint(
     db: Annotated[AsyncSession, Depends(get_async_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
     date_range: str = Query(
         default=settings.dashboard_default_range,
         description="Date range filter (1m, 6m, 1y, all)",
     ),
-    current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> DashboardStatsResponse:
     """
     Get dashboard statistics.
@@ -52,7 +49,6 @@ async def get_dashboard_stats_endpoint(
     Args:
         date_range: Date range filter (1m, 6m, 1y, all)
     """
-    # Validate date range
     valid_ranges = ["1m", "6m", "1y", "all"]
     if date_range not in valid_ranges:
         date_range = settings.dashboard_default_range
@@ -67,11 +63,11 @@ async def get_dashboard_stats_endpoint(
 @router.get("/summary", response_model=DashboardSummaryResponse)
 async def get_dashboard_summary_endpoint(
     db: Annotated[AsyncSession, Depends(get_async_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
     date_range: str = Query(
         default=settings.dashboard_default_range,
         description="Date range filter (1m, 6m, 1y, all)",
     ),
-    current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> DashboardSummaryResponse:
     """
     Get dashboard summary statistics.
@@ -81,7 +77,6 @@ async def get_dashboard_summary_endpoint(
     Args:
         date_range: Date range filter (1m, 6m, 1y, all)
     """
-    # Validate date range
     valid_ranges = ["1m", "6m", "1y", "all"]
     if date_range not in valid_ranges:
         date_range = settings.dashboard_default_range
@@ -94,11 +89,11 @@ async def get_dashboard_summary_endpoint(
 @router.get("/status-distribution", response_model=list[StatusDistributionResponse])
 async def get_status_distribution_endpoint(
     db: Annotated[AsyncSession, Depends(get_async_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
     date_range: str = Query(
         default=settings.dashboard_default_range,
         description="Date range filter (1m, 6m, 1y, all)",
     ),
-    current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> list[StatusDistributionResponse]:
     """
     Get status distribution for the dashboard.
@@ -109,8 +104,6 @@ async def get_status_distribution_endpoint(
         date_range: Date range filter (1m, 6m, 1y, all)
     """
     from ..services.dashboard import get_status_distribution
-    
-    # Validate date range
     valid_ranges = ["1m", "6m", "1y", "all"]
     if date_range not in valid_ranges:
         date_range = settings.dashboard_default_range
@@ -123,11 +116,11 @@ async def get_status_distribution_endpoint(
 @router.get("/category-distribution", response_model=list[CategoryDistributionResponse])
 async def get_category_distribution_endpoint(
     db: Annotated[AsyncSession, Depends(get_async_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
     date_range: str = Query(
         default=settings.dashboard_default_range,
         description="Date range filter (1m, 6m, 1y, all)",
     ),
-    current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> list[CategoryDistributionResponse]:
     """
     Get category distribution for the dashboard pie chart.
@@ -138,8 +131,6 @@ async def get_category_distribution_endpoint(
         date_range: Date range filter (1m, 6m, 1y, all)
     """
     from ..services.dashboard import get_category_distribution
-    
-    # Validate date range
     valid_ranges = ["1m", "6m", "1y", "all"]
     if date_range not in valid_ranges:
         date_range = settings.dashboard_default_range

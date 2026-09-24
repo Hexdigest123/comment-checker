@@ -4,13 +4,12 @@ Adapted from existing utils/llm.py
 """
 
 import os
-from typing import Text, Any, Dict
+from typing import Text, Dict
 
 from mistralai.client import Mistral
 
 from ..config import get_settings
 
-# Get settings
 settings = get_settings()
 
 
@@ -44,8 +43,6 @@ class LLMClient:
         
         result = response.results[0]
         category_scores = result.category_scores
-        
-        # Convert to float values
         scores = {label: float(score) for label, score in category_scores.items()}
         
         return scores

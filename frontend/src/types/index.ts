@@ -1,18 +1,11 @@
-// API Types
-export interface ApiResponse<T> {
-  data: T;
-  message?: string;
-}
-
 export interface ApiError {
   detail: string;
   status_code: number;
 }
 
-// User Types
 export interface User {
   id: string;
-  email: string;
+  username: string;
   name: string;
   is_admin: boolean;
   is_active: boolean;
@@ -20,72 +13,51 @@ export interface User {
   updated_at: string;
 }
 
-export interface UserCreate {
-  email: string;
-  name: string;
-  password: string;
-}
-
-export interface UserUpdate {
-  email?: string;
-  name?: string;
-  password?: string;
-}
-
-// Auth Types
 export interface LoginRequest {
-  email: string;
+  username: string;
   password: string;
 }
 
 export interface LoginResponse {
   access_token: string;
+  refresh_token: string;
   token_type: string;
   user: User;
 }
 
-export interface RefreshResponse {
-  access_token: string;
-  token_type: string;
-}
-
-// Token Types
-export interface Token {
-  id: string;
-  token: string;
-  user_id: string;
-  expires_at: string;
-  is_used: boolean;
-  created_at: string;
-}
-
-// Comment Types
 export type CommentStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'waiting';
 
 export interface Comment {
   id: string;
   text: string;
+  original_author: string | null;
+  original_author_url: string | null;
   source_url: string | null;
+  source_platform: string | null;
+  context: string | null;
   user_id: string;
   status: CommentStatus;
+  priority: string;
+  error_message: string | null;
   created_at: string;
   updated_at: string;
-  user?: User;
+  processed_at?: string | null;
   classifications?: Classification[];
 }
 
-export interface CommentCreate {
+export interface CommentSearchResult {
+  id: string;
   text: string;
-  source_url?: string;
+  original_author: string | null;
+  source_url: string | null;
+  source_platform: string | null;
+  status: CommentStatus;
+  similarity: number;
+  created_at: string;
 }
 
-export interface CommentUpload {
-  file: File;
-}
-
-// Classification Types
 export type ClassificationBackend = 'typesafe' | 'mistral' | 'combined';
-export type ClassificationCategory = 
+export type ClassificationCategory =
   | 'hate'
   | 'harassment'
   | 'violence'
@@ -100,64 +72,12 @@ export interface Classification {
   id: string;
   comment_id: string;
   backend: ClassificationBackend;
-  category: ClassificationCategory;
-  severity: ClassificationSeverity;
+  category: ClassificationCategory | null;
+  severity: ClassificationSeverity | null;
   confidence: number;
   harmful_score: number;
   details: Record<string, unknown>;
   created_at: string;
-}
-
-// Dashboard Types
-export interface DashboardStats {
-  total_comments: number;
-  processed: number;
-  processing: number;
-  waiting: number;
-  failed: number;
-  category_distribution: Record<ClassificationCategory, number>;
-  backend_distribution: Record<ClassificationBackend, number>;
-  recent_comments: Comment[];
-}
-
-export interface DateRange {
-  start_date: string;
-  end_date: string;
-}
-
-// Invite Types
-export interface InviteToken {
-  id: string;
-  token: string;
-  email: string;
-  is_used: boolean;
-  expires_at: string;
-  created_at: string;
-  created_by: string;
-}
-
-export interface InviteCreate {
-  email: string;
-}
-
-// Password Reset Types
-export interface PasswordResetRequest {
-  email: string;
-}
-
-export interface PasswordResetConfirm {
-  token: string;
-  password: string;
-}
-
-// Pagination Types
-export interface PageParams {
-  page: number;
-  page_size: number;
-  sort_by?: string;
-  sort_order?: 'asc' | 'desc';
-  search?: string;
-  filters?: Record<string, string>;
 }
 
 export interface PageResponse<T> {
@@ -168,17 +88,71 @@ export interface PageResponse<T> {
   total_pages: number;
 }
 
-// CSV Types
 export interface CSVUploadResponse {
   message: string;
-  comments_created: number;
-  comments: Comment[];
+  batch_id: string;
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  processing: boolean;
 }
 
-// Notification Types
-export interface Notification {
+// Cluster graph (entity + relations)
+export interface GraphNode {
   id: string;
-  type: 'success' | 'error' | 'info' | 'warning';
-  message: string;
-  created_at: string;
+  name: string;
+  type: 'cluster' | 'account';
+  platform?: string;
+  cluster_type?: string;
+  comment_count?: number;
+  toxicity_score?: number;
+  color?: string | null;
+  index: number;
+}
+
+export interface GraphLink {
+  source: number;
+  target: number;
+  type: 'connection' | 'belongs_to';
+  connection_type?: string;
+  confidence?: number;
+  status?: string;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  links: GraphLink[];
+}
+
+// AI assistant
+export interface AIToolCall {
+  tool: string;
+  input?: Record<string, unknown> | null;
+  output?: Record<string, unknown> | null;
+}
+
+export interface AIChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  tool_calls?: AIToolCall[] | null;
+  model?: string | null;
+  tokens?: number | null;
+  latency_ms?: number | null;
+}
+
+export interface AIChatResponse {
+  response: string;
+  tool_used: string | null;
+  tool_calls: AIToolCall[];
+  conversation_id: string | null;
+  session_id: string | null;
+  model: string | null;
+  tokens: number | null;
+  latency_ms: number | null;
+}
+
+// Import via ExportComments
+export interface ImportStatus {
+  configured: boolean;
+  platforms: string[];
 }

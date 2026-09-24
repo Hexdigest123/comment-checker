@@ -9,8 +9,6 @@ The Mistral pipeline returns no category, so it is only evaluated on detection.
 import json
 from collections import Counter
 
-GROUND_TRUTH_ALL_HARMFUL = True
-
 
 def load(path):
     rows = []
@@ -60,14 +58,7 @@ if __name__ == "__main__":
         print(title)
         print("=" * 70)
         for k, v in summary.items():
-            if k == "mismatch_examples":
-                print(f"  mismatch_examples: {len(v)} shown (first 15)")
-                for m in v[:8]:
-                    print(f"    - gt={m['gt']!r} expected={m['expected']} predicted={m['predicted']} "
-                          f"harmful={m['harmful']} conf={m['confidence']}")
-                    print(f"      {m['comment']}")
-            else:
-                print(f"  {k}: {v}")
+            print(f"  {k}: {v}")
         print()
 
     ms = evaluate("results_mistral.jsonl", "mistral")

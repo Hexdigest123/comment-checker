@@ -87,8 +87,7 @@ class ClusterConnection(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text)
     
     # Who created this connection
-    created_by_id: Mapped[Optional[str]] = mapped_column(
-        String(36),
+    created_by_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True
     )

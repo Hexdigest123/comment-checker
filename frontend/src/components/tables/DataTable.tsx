@@ -1,8 +1,7 @@
-import { useState, useMemo, useCallback } from 'react';
-import type { PageParams, Comment, Classification } from '../../types';
-import { Button } from '../ui';
+import { useEffect, useRef, useState } from 'react';
+import type { PaginatedResourceActions, PaginatedResourceState } from '../../hooks/usePaginatedResource';
 
-interface Column<T> {
+export interface Column<T> {
   key: string;
   header: string;
   sortable?: boolean;
@@ -10,122 +9,107 @@ interface Column<T> {
   className?: string;
 }
 
-interface DataTableProps<T> {
-  data: T[];
-  columns: Column<T>[];
-  total: number;
-  page: number;
-  pageSize: number;
-  onPageChange: (page: number) => void;
-  onPageSizeChange: (size: number) => void;
-  onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void;
-  onSearchChange?: (search: string) => void;
-  onFilterChange?: (filters: Record<string, string>) => void;
-  currentSortBy?: string;
-  currentSortOrder?: 'asc' | 'desc';
-  currentSearch?: string;
-  currentFilters?: Record<string, string>;
-  searchPlaceholder?: string;
-  showSearch?: boolean;
-  showPagination?: boolean;
-  showFilters?: boolean;
-  filterOptions?: { key: string; label: string; options: { value: string; label: string }[] }[];
-  isLoading?: boolean;
-  emptyMessage?: string;
+export interface FilterOption {
+  key: string;
+  label: string;
+  options: { value: string; label: string }[];
 }
 
+export interface DataTableProps<T> {
+  resource: PaginatedResourceState<T> & PaginatedResourceActions;
+  columns: Column<T>[];
+  searchPlaceholder?: string;
+  showSearch?: boolean;
+  showFilters?: boolean;
+  showPagination?: boolean;
+  filterOptions?: FilterOption[];
+  emptyMessage?: string;
+  onRowClick?: (item: T) => void;
+  toolbar?: React.ReactNode;
+}
+
+const pageSizes = [5, 10, 15, 25, 50];
+
+/**
+ * The single reusable data table for all list pages.
+ * It is driven by the usePaginatedResource hook and renders search,
+ * filters, sortable columns, pagination, loading and empty states.
+ */
 export const DataTable = <T,>({
-  data,
+  resource,
   columns,
-  total,
-  page,
-  pageSize,
-  onPageChange,
-  onPageSizeChange,
-  onSortChange,
-  onSearchChange,
-  onFilterChange,
-  currentSortBy,
-  currentSortOrder = 'asc',
-  currentSearch = '',
-  currentFilters = {},
   searchPlaceholder = 'Search...',
   showSearch = true,
-  showPagination = true,
   showFilters = false,
+  showPagination = true,
   filterOptions = [],
-  isLoading = false,
   emptyMessage = 'No data available',
+  onRowClick,
+  toolbar,
 }: DataTableProps<T>) => {
-  const [searchValue, setSearchValue] = useState(currentSearch);
-  const [filterValues, setFilterValues] = useState<Record<string, string>>(currentFilters);
+  const [searchInput, setSearchInput] = useState(resource.search);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const pageSizes = [5, 10, 15, 25];
+  useEffect(() => {
+    setSearchInput(resource.search);
+  }, [resource.search]);
 
-  const handleSort = useCallback((key: string) => {
-    if (!onSortChange) return;
-
-    let newSortOrder: 'asc' | 'desc' = 'asc';
-    if (currentSortBy === key) {
-      newSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
-    }
-
-    onSortChange(key, newSortOrder);
-  }, [currentSortBy, currentSortOrder, onSortChange]);
-
-  const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setSearchValue(value);
-    if (onSearchChange) {
-      // Debounce search
-      const timer = setTimeout(() => {
-        onSearchChange(value);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [onSearchChange]);
-
-  const handleFilterChange = useCallback((key: string, value: string) => {
-    const newFilters = { ...filterValues, [key]: value };
-    setFilterValues(newFilters);
-    if (onFilterChange) {
-      onFilterChange(newFilters);
-    }
-  }, [filterValues, onFilterChange]);
-
-  const getSortIndicator = (key: string) => {
-    if (currentSortBy !== key) return null;
-    return currentSortOrder === 'asc' ? '↑' : '↓';
+    setSearchInput(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      resource.setSearch(value);
+    }, 400);
   };
 
-  const totalPages = useMemo(() => Math.ceil(total / pageSize), [total, pageSize]);
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const handleSort = (column: Column<T>) => {
+    if (!column.sortable) return;
+    if (resource.sortBy === column.key) {
+      resource.setSort(column.key, resource.sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      resource.setSort(column.key, 'asc');
+    }
+  };
+
+  const getSortIndicator = (key: string) => {
+    if (resource.sortBy !== key) return null;
+    return resource.sortOrder === 'asc' ? '↑' : '↓';
+  };
+
+  const totalPages = Math.max(1, Math.ceil(resource.total / resource.pageSize));
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border">
-      {/* Search and Filters */}
-      {(showSearch || showFilters) && (
-        <div className="p-4 border-b flex flex-wrap gap-4 items-center">
+    <div className="bg-white rounded-lg border border-mistral-border overflow-hidden">
+      {(showSearch || showFilters || toolbar) && (
+        <div className="p-4 border-b border-mistral-border flex flex-wrap gap-4 items-center bg-white">
           {showSearch && (
             <div className="flex-1 min-w-64">
               <input
                 type="text"
                 placeholder={searchPlaceholder}
-                value={searchValue}
-                onChange={handleSearch}
-                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={searchInput}
+                onChange={handleSearchChange}
+                className="w-full px-4 py-2 text-sm bg-white border border-mistral-border-strong rounded-md placeholder:text-mistral-muted/70 text-mistral-ink focus:outline-none focus:border-mistral-ink transition-colors duration-200"
               />
             </div>
           )}
           {showFilters && filterOptions.length > 0 && (
-            <div className="flex gap-4 flex-wrap">
+            <div className="flex gap-3 flex-wrap">
               {filterOptions.map((filter) => (
                 <select
                   key={filter.key}
-                  value={filterValues[filter.key] || ''}
-                  onChange={(e) => handleFilterChange(filter.key, e.target.value)}
-                  className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={resource.filters[filter.key] || ''}
+                  onChange={(e) => resource.setFilter(filter.key, e.target.value)}
+                  className="px-3 py-2 font-mono text-xs uppercase tracking-wide bg-white border border-mistral-border-strong rounded-md text-mistral-muted focus:outline-none focus:border-mistral-ink transition-colors duration-200"
                 >
-                  <option value="">{filter.label}</option>
+                  <option value="">All {filter.label}</option>
                   {filter.options.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -135,37 +119,35 @@ export const DataTable = <T,>({
               ))}
             </div>
           )}
+          {toolbar}
         </div>
       )}
 
-      {/* Table */}
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-gray-50">
+          <thead className="bg-mistral-band">
             <tr>
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${column.className || ''}`}
-                  onClick={() => column.sortable && handleSort(column.key)}
-                  style={column.sortable ? { cursor: 'pointer' } : {}}
+                  className={`px-6 py-3 text-left font-mono text-[11px] font-normal uppercase tracking-widest text-mistral-muted border-b border-mistral-border ${column.className || ''}`}
+                  onClick={() => handleSort(column)}
+                  style={column.sortable ? { cursor: 'pointer' } : undefined}
                 >
-                  <div className="flex items-center">
-                    {column.header}
-                    {column.sortable && (
-                      <span className="ml-1">{getSortIndicator(column.key)}</span>
-                    )}
-                  </div>
+                  {column.header}
+                  {column.sortable && (
+                    <span className="ml-1 text-mistral-muted/80">{getSortIndicator(column.key)}</span>
+                  )}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {isLoading ? (
+          <tbody className="bg-white">
+            {resource.isLoading ? (
               <tr>
-                <td colSpan={columns.length} className="px-6 py-4 text-center">
-                  <div className="flex items-center justify-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <td colSpan={columns.length} className="px-6 py-12 text-center">
+                  <div className="flex items-center justify-center gap-3 text-mistral-muted font-mono text-xs uppercase tracking-wide">
+                    <svg className="animate-spin h-4 w-4 text-mistral-ink" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -173,21 +155,27 @@ export const DataTable = <T,>({
                   </div>
                 </td>
               </tr>
-            ) : data.length === 0 ? (
+            ) : resource.items.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={columns.length} className="px-6 py-12 text-center text-sm text-mistral-muted">
                   {emptyMessage}
                 </td>
               </tr>
             ) : (
-              data.map((item, index) => (
-                <tr key={(item as { id?: string }).id || index} className="hover:bg-gray-50">
+              resource.items.map((item, index) => (
+                <tr
+                  key={(item as { id?: string | number }).id ?? index}
+                  className={`border-b border-mistral-border last:border-b-0 hover:bg-mistral-surface transition-colors duration-200 ${onRowClick ? 'cursor-pointer' : ''}`}
+                  onClick={onRowClick ? () => onRowClick(item) : undefined}
+                >
                   {columns.map((column) => (
                     <td
                       key={column.key}
-                      className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${column.className || ''}`}
+                      className={`px-6 py-4 text-sm text-mistral-ink ${column.className || ''}`}
                     >
-                      {column.render ? column.render(item) : (item as Record<string, unknown>)[column.key] as React.ReactNode}
+                      {column.render
+                        ? column.render(item)
+                        : ((item as Record<string, unknown>)[column.key] as React.ReactNode) ?? '-'}
                     </td>
                   ))}
                 </tr>
@@ -197,45 +185,45 @@ export const DataTable = <T,>({
         </table>
       </div>
 
-      {/* Pagination */}
-      {showPagination && total > 0 && (
-        <div className="p-4 border-t flex flex-wrap items-center justify-between gap-4">
-          <div className="text-sm text-gray-500">
-            Showing {page * pageSize - pageSize + 1} to {Math.min(page * pageSize, total)} of {total}
+      {showPagination && resource.total > 0 && (
+        <div className="p-4 border-t border-mistral-border flex flex-wrap items-center justify-between gap-4 bg-white">
+          <div className="font-mono text-xs text-mistral-muted uppercase tracking-wide">
+            Showing {resource.page * resource.pageSize - resource.pageSize + 1} to{' '}
+            {Math.min(resource.page * resource.pageSize, resource.total)} of {resource.total}
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex gap-2">
-              {pageSizes.map((size) => (
-                <Button
-                  key={size}
-                  variant={pageSize === size ? 'primary' : 'outline'}
-                  size="sm"
-                  onClick={() => onPageSizeChange(size)}
-                >
-                  {size}
-                </Button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === 1}
-                onClick={() => onPageChange(page - 1)}
+            <label className="flex items-center gap-2 font-mono text-xs text-mistral-muted uppercase tracking-wide">
+              Rows
+              <select
+                value={resource.pageSize}
+                onChange={(e) => resource.setPageSize(Number(e.target.value))}
+                className="px-2 py-1 bg-white border border-mistral-border-strong rounded-md text-mistral-ink focus:outline-none focus:border-mistral-ink transition-colors duration-200"
+              >
+                {pageSizes.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex gap-2 items-center">
+              <button
+                className="px-3 py-1.5 font-display text-sm border border-mistral-border-strong rounded-md text-mistral-ink hover:border-mistral-ink transition-colors duration-200 disabled:opacity-40 disabled:hover:border-mistral-border-strong"
+                disabled={resource.page === 1}
+                onClick={() => resource.setPage(resource.page - 1)}
               >
                 Previous
-              </Button>
-              <span className="px-4 py-2 text-sm">
-                Page {page} of {totalPages}
+              </button>
+              <span className="px-1 font-mono text-xs text-mistral-muted">
+                {resource.page} / {totalPages}
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === totalPages}
-                onClick={() => onPageChange(page + 1)}
+              <button
+                className="px-3 py-1.5 font-display text-sm border border-mistral-border-strong rounded-md text-mistral-ink hover:border-mistral-ink transition-colors duration-200 disabled:opacity-40 disabled:hover:border-mistral-border-strong"
+                disabled={resource.page >= totalPages}
+                onClick={() => resource.setPage(resource.page + 1)}
               >
                 Next
-              </Button>
+              </button>
             </div>
           </div>
         </div>
@@ -244,97 +232,76 @@ export const DataTable = <T,>({
   );
 };
 
-// Status badge component for tables
-export const StatusBadge: React.FC<{ status: string; className?: string }> = ({ status, className = '' }) => {
-  const statusClasses = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    processing: 'bg-blue-100 text-blue-800',
-    completed: 'bg-green-100 text-green-800',
-    failed: 'bg-red-100 text-red-800',
-    waiting: 'bg-gray-100 text-gray-800',
-  };
+// Shared badge components used by multiple tables
 
+const badgeBase =
+  'inline-flex items-center px-2 py-0.5 rounded-sm border font-mono text-[11px] uppercase tracking-wide whitespace-nowrap';
+
+export const StatusBadge: React.FC<{ status: string; className?: string }> = ({ status, className = '' }) => {
+  const statusClasses: Record<string, string> = {
+    pending: 'bg-mistral-yellow-tint border-mistral-yellow/70 text-mistral-ink',
+    processing: 'bg-mistral-blue-tint border-mistral-blue/40 text-mistral-ink',
+    completed: 'bg-mistral-green-tint border-mistral-green/50 text-mistral-ink',
+    failed: 'bg-mistral-red-tint border-mistral-red/60 text-mistral-ink',
+    waiting: 'bg-mistral-band border-mistral-border-strong text-mistral-muted',
+  };
   return (
-    <span
-      className={`px-2 py-1 rounded-full text-xs font-medium ${statusClasses[status as keyof typeof statusClasses] || 'bg-gray-100 text-gray-800'} ${className}`}
-    >
+    <span className={`${badgeBase} ${statusClasses[status] || 'bg-mistral-band border-mistral-border-strong text-mistral-muted'} ${className}`}>
       {status}
     </span>
   );
 };
 
-// Severity badge component
 export const SeverityBadge: React.FC<{ severity: string; className?: string }> = ({ severity, className = '' }) => {
-  const severityClasses = {
-    low: 'bg-green-100 text-green-800',
-    medium: 'bg-yellow-100 text-yellow-800',
-    high: 'bg-orange-100 text-orange-800',
-    critical: 'bg-red-100 text-red-800',
+  const severityClasses: Record<string, string> = {
+    low: 'bg-mistral-green-tint border-mistral-green/50 text-mistral-ink',
+    medium: 'bg-mistral-yellow-tint border-mistral-yellow/70 text-mistral-ink',
+    high: 'bg-mistral-orange-tint border-mistral-orange/50 text-mistral-ink',
+    critical: 'bg-mistral-red-tint border-mistral-red/60 text-mistral-ink',
   };
-
   return (
-    <span
-      className={`px-2 py-1 rounded-full text-xs font-medium ${severityClasses[severity as keyof typeof severityClasses] || 'bg-gray-100 text-gray-800'} ${className}`}
-    >
+    <span className={`${badgeBase} ${severityClasses[severity] || 'bg-mistral-band border-mistral-border-strong text-mistral-muted'} ${className}`}>
       {severity}
     </span>
   );
 };
 
-// Backend badge component
 export const BackendBadge: React.FC<{ backend: string; className?: string }> = ({ backend, className = '' }) => {
-  const backendClasses = {
-    typesafe: 'bg-purple-100 text-purple-800',
-    mistral: 'bg-indigo-100 text-indigo-800',
-    combined: 'bg-cyan-100 text-cyan-800',
+  const backendClasses: Record<string, string> = {
+    typesafe: 'bg-mistral-pink-tint border-mistral-pink/60 text-mistral-ink',
+    mistral: 'bg-mistral-blue-tint border-mistral-blue/40 text-mistral-ink',
+    combined: 'bg-mistral-orange-tint border-mistral-orange/50 text-mistral-ink',
   };
-
   return (
-    <span
-      className={`px-2 py-1 rounded-full text-xs font-medium ${backendClasses[backend as keyof typeof backendClasses] || 'bg-gray-100 text-gray-800'} ${className}`}
-    >
+    <span className={`${badgeBase} ${backendClasses[backend] || 'bg-mistral-band border-mistral-border-strong text-mistral-muted'} ${className}`}>
       {backend}
     </span>
   );
 };
 
-// Category badge component
-export const CategoryBadge: React.FC<{ category: string; className?: string }> = ({ category, className = '' }) => {
-  const categoryClasses = {
-    hate: 'bg-red-100 text-red-800',
-    harassment: 'bg-orange-100 text-orange-800',
-    violence: 'bg-red-100 text-red-800',
-    self_harm: 'bg-purple-100 text-purple-800',
-    sexual: 'bg-pink-100 text-pink-800',
-    spam: 'bg-gray-100 text-gray-800',
-    illegal: 'bg-black text-white',
-    safe: 'bg-green-100 text-green-800',
+export const CategoryBadge: React.FC<{ category: string | null; className?: string }> = ({ category, className = '' }) => {
+  const categoryClasses: Record<string, string> = {
+    hate: 'bg-mistral-red-tint border-mistral-red/60 text-mistral-ink',
+    harassment: 'bg-mistral-orange-tint border-mistral-orange/50 text-mistral-ink',
+    violence: 'bg-mistral-red-tint border-mistral-red-deep/40 text-mistral-ink',
+    self_harm: 'bg-mistral-pink-tint border-mistral-pink/60 text-mistral-ink',
+    sexual: 'bg-mistral-pink-tint border-mistral-pink/40 text-mistral-ink',
+    spam: 'bg-mistral-band border-mistral-border-strong text-mistral-muted',
+    illegal: 'bg-mistral-ink border-transparent text-mistral-surface',
+    safe: 'bg-mistral-green-tint border-mistral-green/50 text-mistral-ink',
   };
-
   return (
-    <span
-      className={`px-2 py-1 rounded-full text-xs font-medium ${categoryClasses[category as keyof typeof categoryClasses] || 'bg-gray-100 text-gray-800'} ${className}`}
-    >
-      {category}
+    <span className={`${badgeBase} ${categoryClasses[category || ''] || 'bg-mistral-band border-mistral-border-strong text-mistral-muted'} ${className}`}>
+      {category || 'none'}
     </span>
   );
 };
 
-// Comment-specific columns for reuse
-export const commentColumns: Column<Comment>[] = [
-  { key: 'text', header: 'Comment', sortable: true, className: 'max-w-md' },
-  { key: 'source_url', header: 'Source URL', sortable: true, className: 'max-w-xs' },
-  { key: 'status', header: 'Status', sortable: true, render: (item) => <StatusBadge status={item.status} /> },
-  { key: 'created_at', header: 'Created At', sortable: true },
-];
-
-// Classification-specific columns
-export const classificationColumns: Column<Classification>[] = [
-  { key: 'comment_id', header: 'Comment ID', sortable: true },
-  { key: 'backend', header: 'Backend', sortable: true, render: (item) => <BackendBadge backend={item.backend} /> },
-  { key: 'category', header: 'Category', sortable: true, render: (item) => <CategoryBadge category={item.category} /> },
-  { key: 'severity', header: 'Severity', sortable: true, render: (item) => <SeverityBadge severity={item.severity} /> },
-  { key: 'confidence', header: 'Confidence', sortable: true, render: (item) => `${(item.confidence * 100).toFixed(1)}%` },
-  { key: 'harmful_score', header: 'Harmful Score', sortable: true, render: (item) => item.harmful_score.toFixed(2) },
-  { key: 'created_at', header: 'Classified At', sortable: true },
-];
+export const PlatformBadge: React.FC<{ platform: string | null; className?: string }> = ({ platform, className = '' }) => {
+  if (!platform) return <span className="text-mistral-muted/60">-</span>;
+  return (
+    <span className={`${badgeBase} bg-mistral-band border-mistral-border-strong text-mistral-muted ${className}`}>
+      {platform}
+    </span>
+  );
+};

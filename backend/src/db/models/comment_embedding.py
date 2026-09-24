@@ -1,7 +1,7 @@
 """Comment embedding model for semantic search with PGVector."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import String, DateTime, ForeignKey, Integer, Float, func
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -27,8 +27,7 @@ class CommentEmbedding(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, index=True)
     
     # Reference to comment
-    comment_id: Mapped[str] = mapped_column(
-        String(36),
+    comment_id: Mapped[int] = mapped_column(
         ForeignKey("comments.id", ondelete="CASCADE"),
         nullable=False,
         index=True,

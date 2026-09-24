@@ -7,8 +7,6 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from .pagination import PageParams
-
 
 class CommentBase(BaseModel):
     """Base comment schema."""
@@ -70,6 +68,7 @@ class CommentListResponse(BaseModel):
     text: str
     original_author: Optional[str]
     source_url: Optional[str]
+    source_platform: Optional[str]
     status: str
     priority: str
     processed_at: Optional[datetime]
@@ -79,14 +78,6 @@ class CommentListResponse(BaseModel):
         from_attributes = True
 
 
-class CommentUploadResponse(BaseModel):
-    """Response after uploading comments via CSV."""
-    message: str = Field(..., description="Upload message")
-    total_comments: int = Field(..., description="Total comments uploaded")
-    batch_id: str = Field(..., description="Batch ID for tracking")
-    processing: bool = Field(default=True, description="Whether processing is async")
-
-
 class CommentStatusResponse(BaseModel):
     """Comment status response."""
     id: int
@@ -94,6 +85,18 @@ class CommentStatusResponse(BaseModel):
     processed_at: Optional[datetime]
     processing_started_at: Optional[datetime]
     error_message: Optional[str]
+
+
+class CommentSearchResponse(BaseModel):
+    """Semantic search result item with similarity score."""
+    id: int
+    text: str
+    original_author: Optional[str] = None
+    source_url: Optional[str] = None
+    source_platform: Optional[str] = None
+    status: str
+    similarity: float
+    created_at: datetime
     
     class Config:
         from_attributes = True

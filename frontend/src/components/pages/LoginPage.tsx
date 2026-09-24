@@ -1,24 +1,41 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button, Input } from '../ui';
-import { useAuth } from '../../services/auth';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
 
-export const LoginPage = () => {
-  const [email, setEmail] = useState('');
+const LoginPage = () => {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { login, isLoading } = useAuth();
-  const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
     try {
-      await login({ email, password });
-      navigate('/');
+      const response = await fetch(`${import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Login failed');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('access_token', data.access_token);
+      if (data.refresh_token) {
+        localStorage.setItem('refresh_token', data.refresh_token);
+      }
+      localStorage.setItem('user', JSON.stringify(data.user));
+      window.location.href = '/';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -38,12 +55,12 @@ export const LoginPage = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            label="Username"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             required
-            autoComplete="email"
+            autoComplete="username"
           />
 
           <Input
@@ -64,16 +81,9 @@ export const LoginPage = () => {
             Sign In
           </Button>
         </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-gray-500 text-sm">
-            Don't have an account?{' '}
-            <a href="/register" className="text-blue-600 hover:text-blue-700 font-medium">
-              Request an invite
-            </a>
-          </p>
-        </div>
       </div>
     </div>
   );
 };
+
+export default LoginPage;

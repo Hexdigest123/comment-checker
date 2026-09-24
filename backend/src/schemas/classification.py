@@ -3,7 +3,7 @@ Classification schemas
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -28,38 +28,33 @@ class ClassificationCreate(ClassificationBase):
 
 class ClassificationResponse(BaseModel):
     """Classification response schema."""
-    id: int
+    id: str
     comment_id: int
     backend: str
     flagged: bool
-    flagged_by: Optional[str]
     category: Optional[str]
-    category_label: Optional[str]
-    scores: Dict[str, float]
-    confidence: Optional[float]
     severity: Optional[str]
-    severity_label: Optional[str]
-    harmful: float
-    threshold: float
-    processing_time_ms: Optional[float]
+    confidence: Optional[float]
+    harmful_score: float
+    details: Optional[Dict] = None
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
 
 class ClassificationListResponse(BaseModel):
     """Classification list item schema."""
-    id: int
+    id: str
     comment_id: int
     backend: str
     flagged: bool
-    flagged_by: Optional[str]
     category: Optional[str]
-    category_label: Optional[str]
-    harmful: float
+    severity: Optional[str]
+    confidence: Optional[float]
+    harmful_score: float
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 

@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import String, Text, Boolean, DateTime, ForeignKey, func
+from sqlalchemy import String, Text, Boolean, DateTime, ForeignKey, Integer, Float, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
@@ -67,8 +67,7 @@ class AccountCluster(Base):
     icon: Mapped[Optional[str]] = mapped_column(String(50))
     
     # Ownership (which internal user owns/manages this cluster)
-    owner_id: Mapped[Optional[str]] = mapped_column(
-        String(36),
+    owner_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True
     )

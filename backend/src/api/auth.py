@@ -4,11 +4,11 @@ OWASP-compliant JWT authentication with access and refresh tokens
 """
 
 import logging
-from datetime import datetime, timedelta
-from typing import Annotated, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -26,12 +26,9 @@ from ..schemas import (
     LogoutResponse,
 )
 from ..services.auth import (
-    get_password_hash,
     verify_password,
     create_access_token,
     create_refresh_token,
-    get_token_from_header,
-    get_token_from_cookie,
 )
 from ..services.token import (
     create_refresh_token_db,
@@ -39,16 +36,13 @@ from ..services.token import (
     revoke_refresh_token,
     rotate_refresh_token,
 )
-from ..services.user import get_user_by_email, get_user_by_id
+from ..services.user import get_user_by_username, get_user_by_id
 
-# Get settings
 settings = get_settings()
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
-# Create router
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(tags=["Authentication"])
 
 # Password hashing context - OWASP: Use bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -81,19 +75,18 @@ async def get_current_user(
             settings.jwt_secret_key,
             algorithms=[settings.algorithm],
         )
-        user_id: int = payload.get("sub")
-        if user_id is None:
+        raw_user_id = payload.get("sub")
+        if raw_user_id is None:
             raise credentials_exception
-        
-        # Get user from database
+        user_id = int(raw_user_id)
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
-        
+
         if user is None:
             raise credentials_exception
-        
+
         return user
-    except JWTError as e:
+    except (JWTError, ValueError, TypeError) as e:
         logger.warning(f"JWT validation error: {e}")
         raise credentials_exception
 
@@ -148,34 +141,29 @@ async def login(
     - Secure token generation
     - HTTP-only cookies for refresh tokens
     """
-    # Get user by email
-    user = await get_user_by_email(db, login_data.email)
-    
+    user = await get_user_by_username(db, login_data.username)
+
     if user is None or not user.is_active:
-        logger.warning(f"Login failed: user not found or inactive - {login_data.email}")
+        logger.warning(f"Login failed: user not found or inactive - {login_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Verify password - OWASP: Use constant-time comparison
     if not verify_password(login_data.password, user.password_hash):
-        logger.warning(f"Login failed: incorrect password - {login_data.email}")
+        logger.warning(f"Login failed: incorrect password - {login_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # Generate access token
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
-        data={"sub": str(user.id), "email": user.email, "is_admin": user.is_admin},
+        data={"sub": str(user.id), "username": user.username, "is_admin": user.is_admin},
         expires_delta=access_token_expires,
     )
-    
-    # Generate refresh token
     refresh_token_expires = timedelta(days=settings.refresh_token_expire_days)
     refresh_token = create_refresh_token(
         data={"sub": str(user.id)},
@@ -190,13 +178,11 @@ async def login(
         db=db,
         user_id=user.id,
         token=refresh_token,
-        expires_at=datetime.utcnow() + refresh_token_expires,
+        expires_at=datetime.now(timezone.utc) + refresh_token_expires,
         ip_address=ip_address,
         user_agent=user_agent,
     )
-    
-    # Update last login
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(timezone.utc)
     await db.commit()
     
     # Set refresh token in HTTP-only cookie - OWASP: Prevent XSS
@@ -211,8 +197,8 @@ async def login(
         path="/api/v1/auth/refresh",
     )
     
-    logger.info(f"User logged in: {user.email}")
-    
+    logger.info(f"User logged in: {user.username}")
+
     return LoginResponse(
         access_token=access_token,
         token_type="bearer",
@@ -221,7 +207,7 @@ async def login(
         refresh_expires_in=refresh_token_expires_seconds,
         user={
             "id": user.id,
-            "email": user.email,
+            "username": user.username,
             "full_name": user.full_name,
             "is_admin": user.is_admin,
         },
@@ -243,7 +229,6 @@ async def refresh_token(
     - Validate refresh token from database
     - HTTP-only cookies
     """
-    # Get refresh token from request
     refresh_token = refresh_request.refresh_token
     
     if not refresh_token:
@@ -256,8 +241,6 @@ async def refresh_token(
             detail="Refresh token required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # Get refresh token from database
     db_refresh_token = await get_refresh_token_by_token(db, refresh_token)
     
     if db_refresh_token is None or db_refresh_token.status != TokenStatus.ACTIVE:
@@ -268,7 +251,7 @@ async def refresh_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    if db_refresh_token.expires_at < datetime.utcnow():
+    if db_refresh_token.expires_at < datetime.now(timezone.utc):
         # Token expired - revoke it
         await revoke_refresh_token(db, db_refresh_token.id)
         raise HTTPException(
@@ -276,8 +259,6 @@ async def refresh_token(
             detail="Refresh token expired",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # Get user
     user = await get_user_by_id(db, db_refresh_token.user_id)
     
     if user is None or not user.is_active:
@@ -287,11 +268,9 @@ async def refresh_token(
             detail="User not found or inactive",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # Generate new access token
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
-        data={"sub": str(user.id), "email": user.email, "is_admin": user.is_admin},
+        data={"sub": str(user.id), "username": user.username, "is_admin": user.is_admin},
         expires_delta=access_token_expires,
     )
     
@@ -301,8 +280,6 @@ async def refresh_token(
         data={"sub": str(user.id)},
         expires_delta=new_refresh_token_expires,
     )
-    
-    # Store new refresh token
     ip_address = request.client.host
     user_agent = request.headers.get("user-agent", "")
     
@@ -310,12 +287,11 @@ async def refresh_token(
         db=db,
         old_token_id=db_refresh_token.id,
         new_token=new_refresh_token,
-        expires_at=datetime.utcnow() + new_refresh_token_expires,
+        expires_at=datetime.now(timezone.utc) + new_refresh_token_expires,
         ip_address=ip_address,
         user_agent=user_agent,
     )
     
-    # Set new refresh token in HTTP-only cookie
     new_refresh_token_expires_seconds = int(new_refresh_token_expires.total_seconds())
     response.set_cookie(
         key="refresh_token",
@@ -327,7 +303,7 @@ async def refresh_token(
         path="/api/v1/auth/refresh",
     )
     
-    logger.info(f"Token refreshed for user: {user.email}")
+    logger.info(f"Token refreshed for user: {user.username}")
     
     return RefreshResponse(
         access_token=access_token,
@@ -352,11 +328,9 @@ async def logout(
     - Revokes refresh token in database
     - Clears HTTP-only cookie
     """
-    # Get refresh token from cookie
     refresh_token = request.cookies.get("refresh_token")
     
     if refresh_token:
-        # Revoke the refresh token
         db_refresh_token = await get_refresh_token_by_token(db, refresh_token)
         if db_refresh_token:
             await revoke_refresh_token(db, db_refresh_token.id)
@@ -370,7 +344,7 @@ async def logout(
         samesite="strict",
     )
     
-    logger.info(f"User logged out: {current_user.email}")
+    logger.info(f"User logged out: {current_user.username}")
     
     return LogoutResponse(
         message="Logged out successfully",
@@ -391,7 +365,6 @@ async def logout_all(
     OWASP Compliance:
     - Revokes all refresh tokens for the user
     """
-    # Revoke all refresh tokens for this user
     from sqlalchemy import update
     await db.execute(
         update(RefreshToken)
@@ -400,7 +373,6 @@ async def logout_all(
     )
     await db.commit()
     
-    # Clear refresh token cookie
     response.delete_cookie(
         key="refresh_token",
         path="/api/v1/auth/refresh",
@@ -409,7 +381,7 @@ async def logout_all(
         samesite="strict",
     )
     
-    logger.info(f"User logged out from all sessions: {current_user.email}")
+    logger.info(f"User logged out from all sessions: {current_user.username}")
     
     return LogoutResponse(
         message="Logged out from all sessions",

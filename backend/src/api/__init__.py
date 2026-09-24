@@ -2,6 +2,6 @@
 API routers module
 """
 
-from . import auth, users, comments, classification, dashboard, invites, accounts, clusters, ai
+from . import auth, users, comments, classification, dashboard, accounts, clusters, ai, imports
 
-__all__ = ["auth", "users", "comments", "classification", "dashboard", "invites", "accounts", "clusters", "ai"]
+__all__ = ["auth", "users", "comments", "classification", "dashboard", "accounts", "clusters", "ai", "imports"]

@@ -4,14 +4,13 @@ Authentication schemas
 
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 
 class LoginRequest(BaseModel):
     """Login request schema."""
-    email: EmailStr = Field(..., description="User email")
-    password: str = Field(..., min_length=8, description="User password")
-    remember_me: bool = Field(default=False, description="Remember me (longer refresh token)")
+    username: str = Field(..., description="Username")
+    password: str = Field(..., description="User password")
 
 
 class LoginResponse(BaseModel):

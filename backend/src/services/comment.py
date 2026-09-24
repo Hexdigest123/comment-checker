@@ -5,17 +5,16 @@ Uses the new DB models for comment operations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, or_, select, update, delete, desc, asc, func
+from sqlalchemy import or_, select, update, delete, desc, asc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from ..db.models import Comment, CommentStatus, CommentPriority
+from ..db.models import Comment
 from ..db.models.comment import CommentStatus as CS, CommentPriority as CP
-from ..schemas import CommentCreate, CommentUpdate, PageParams, PageResponse, CommentListResponse
+from ..schemas import CommentUpdate, PageResponse, CommentListResponse
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +32,7 @@ async def get_comment_by_id(
             joinedload(Comment.external_account)
         )
     )
-    return result.scalar_one_or_none()
+    return result.unique().scalar_one_or_none()
 
 
 async def get_comments_by_user(
@@ -65,12 +64,10 @@ async def create_comment(
     Returns:
         Created comment
     """
-    # Handle string IDs for user_id
     user_id = comment_data.get("user_id")
     if user_id is not None and isinstance(user_id, int):
         user_id = str(user_id)
     
-    # Handle priority
     priority = comment_data.get("priority")
     if priority:
         if isinstance(priority, str):
@@ -80,8 +77,6 @@ async def create_comment(
                 priority = CP.MEDIUM
     else:
         priority = CP.MEDIUM
-    
-    # Handle status
     status = comment_data.get("status")
     if status:
         if isinstance(status, str):
@@ -91,19 +86,21 @@ async def create_comment(
                 status = CS.PENDING
     else:
         status = CS.PENDING
-    
+
     comment = Comment(
         id=comment_data.get("id"),
         text=comment_data.get("text"),
-        user_id=user_id,
+        user_id=comment_data.get("user_id"),
         external_account_id=comment_data.get("external_account_id"),
         platform=comment_data.get("platform"),
         platform_comment_id=comment_data.get("platform_comment_id"),
+        original_author=comment_data.get("original_author"),
+        source_platform=comment_data.get("source_platform"),
         source_url=comment_data.get("source_url"),
         context=comment_data.get("context"),
         priority=priority,
         status=status,
-        metadata=comment_data.get("metadata", {}),
+        extra_metadata=comment_data.get("metadata", {}),
     )
     
     db.add(comment)
@@ -132,12 +129,10 @@ async def create_comment_batch(
     comments = []
     
     for comment_data in comments_data:
-        # Handle string IDs for user_id
         user_id = comment_data.get("user_id")
         if user_id is not None and isinstance(user_id, int):
             user_id = str(user_id)
         
-        # Handle priority
         priority = comment_data.get("priority")
         if priority:
             if isinstance(priority, str):
@@ -147,8 +142,6 @@ async def create_comment_batch(
                     priority = CP.MEDIUM
         else:
             priority = CP.MEDIUM
-        
-        # Handle status
         status = comment_data.get("status")
         if status:
             if isinstance(status, str):
@@ -158,18 +151,20 @@ async def create_comment_batch(
                     status = CS.PENDING
         else:
             status = CS.PENDING
-        
+
         comment = Comment(
             text=comment_data.get("text"),
-            user_id=user_id,
+            user_id=comment_data.get("user_id"),
             external_account_id=comment_data.get("external_account_id"),
             platform=comment_data.get("platform"),
             platform_comment_id=comment_data.get("platform_comment_id"),
+            original_author=comment_data.get("original_author"),
+            source_platform=comment_data.get("source_platform"),
             source_url=comment_data.get("source_url"),
             context=comment_data.get("context"),
             priority=priority,
             status=status,
-            metadata=comment_data.get("metadata", {}),
+            extra_metadata=comment_data.get("metadata", {}),
         )
         comments.append(comment)
     
@@ -207,8 +202,6 @@ async def update_comment(
     
     if comment is None:
         raise ValueError("Comment not found")
-    
-    # Update fields
     if comment_update.text:
         comment.text = comment_update.text
     
@@ -228,7 +221,7 @@ async def update_comment(
             comment.priority = CP.MEDIUM
     
     if comment_update.metadata:
-        comment.metadata = comment_update.metadata
+        comment.extra_metadata = comment_update.metadata
     
     comment.updated_at = datetime.utcnow()
     
@@ -326,19 +319,17 @@ async def get_comments_paginated(
         Paginated comment list
     """
     from ..db.models import Comment as DBComment
-    
-    # Build query
-    query = select(DBComment)
+    query = select(DBComment).options(
+        joinedload(DBComment.external_account),
+        joinedload(DBComment.user),
+    )
     
     if filter_condition:
         query = query.where(filter_condition)
-    
-    # Get total count
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
     
-    # Sorting
     if sort_by and hasattr(DBComment, sort_by):
         column = getattr(DBComment, sort_by)
         if sort_order == "asc":
@@ -351,12 +342,9 @@ async def get_comments_paginated(
     # Pagination
     offset = (page - 1) * page_size
     query = query.offset(offset).limit(page_size)
-    
-    # Execute query
     result = await db.execute(query)
     comments = result.scalars().all()
     
-    # Calculate pagination info
     total_pages = (total + page_size - 1) // page_size
     has_next = page < total_pages
     has_previous = page > 1
@@ -366,8 +354,9 @@ async def get_comments_paginated(
             CommentListResponse(
                 id=c.id,
                 text=c.text,
-                original_author=c.author_name,
+                original_author=c.author_name or c.original_author,
                 source_url=c.source_url,
+                source_platform=c.source_platform,
                 status=c.status.value,
                 priority=c.priority.value,
                 processed_at=c.processed_at,
@@ -428,9 +417,7 @@ async def count_comments_by_status(
     db: AsyncSession,
 ) -> Dict[str, int]:
     """Count comments by status."""
-    from sqlalchemy import case, func
-    
-    # Get counts for each status
+    from sqlalchemy import func
     statuses = [s.value for s in CS]
     counts = {}
     

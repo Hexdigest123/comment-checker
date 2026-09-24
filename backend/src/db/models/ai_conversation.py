@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import String, Text, DateTime, ForeignKey, JSON, func
+from sqlalchemy import String, Text, DateTime, ForeignKey, Integer, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
@@ -45,8 +45,7 @@ class AIConversation(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, index=True)
     
     # User who owns this conversation
-    user_id: Mapped[str] = mapped_column(
-        String(36),
+    user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True

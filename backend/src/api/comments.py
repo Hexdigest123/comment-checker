@@ -7,12 +7,10 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, status
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import or_, and_, desc, asc
+from sqlalchemy import or_, and_
 
 from ..config import get_settings
 from ..db.session import get_async_db
@@ -22,7 +20,7 @@ from ..schemas import (
     CommentUpdate,
     CommentResponse,
     CommentListResponse,
-    CommentUploadResponse,
+    CommentSearchResponse,
     CommentStatusResponse,
     PageParams,
     PageResponse,
@@ -30,30 +28,27 @@ from ..schemas import (
 )
 from ..services.comment import (
     get_comment_by_id,
-    get_comments_by_user,
     create_comment,
     update_comment,
     delete_comment,
     get_comments_paginated,
 )
+from ..services.classification import classification_to_response
 from ..services.csv_processor import process_csv_file
-from ..api.auth import get_current_user, get_current_active_user, get_current_admin_user
+from ..api.auth import get_current_active_user
 
-# Get settings
 settings = get_settings()
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
-# Create router
-router = APIRouter(prefix="/comments", tags=["Comments"])
+router = APIRouter(tags=["Comments"])
 
 
 @router.get("/", response_model=PageResponse[CommentListResponse])
 async def list_comments(
-    params: PageParams = Depends(),
     db: Annotated[AsyncSession, Depends(get_async_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
+    params: PageParams = Depends(),
 ) -> PageResponse[CommentListResponse]:
     """
     List comments with pagination, search, sort, and filter.
@@ -64,10 +59,8 @@ async def list_comments(
     - Sort (sort_by, sort_order)
     - Filter by status, user, date range, etc.
     """
-    # Build filter conditions
     filter_conditions = []
     
-    # Status filter
     if params.status:
         try:
             status_enum = CommentStatus(params.status.lower())
@@ -79,7 +72,6 @@ async def list_comments(
     if not current_user.is_admin:
         filter_conditions.append(Comment.user_id == current_user.id)
     elif params.search and "user:" in params.search:
-        # Extract user ID from search
         import re
         match = re.search(r"user:(\d+)", params.search)
         if match:
@@ -112,8 +104,6 @@ async def list_comments(
                 Comment.source_url.ilike(search_pattern),
             ])
         filter_conditions.append(or_(*search_conditions))
-    
-    # Combine all conditions
     combined_filter = and_(*filter_conditions) if filter_conditions else None
     
     result = await get_comments_paginated(
@@ -126,6 +116,50 @@ async def list_comments(
     )
     
     return result
+
+
+@router.get("/search/semantic", response_model=list[CommentSearchResponse])
+async def semantic_comment_search(
+    db: Annotated[AsyncSession, Depends(get_async_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    query: str = Query(..., min_length=1, description="Natural language search query"),
+    limit: int = Query(10, ge=1, le=100, description="Maximum number of results"),
+    min_similarity: float = Query(0.0, ge=0.0, le=1.0, description="Minimum similarity score"),
+) -> list[CommentSearchResponse]:
+    """
+    Semantic search over comments using Mistral embeddings.
+
+    Finds comments whose meaning is closest to the query, even without
+    matching keywords. Each result includes a similarity score (0-1).
+    """
+    from ..services.embedding import EmbeddingService
+
+    embedding_service = EmbeddingService(db)
+    results = await embedding_service.semantic_search(
+        query=query,
+        limit=limit,
+        min_similarity=min_similarity,
+    )
+    await embedding_service.close()
+
+    # Regular users only see their own comments
+    items = []
+    for comment, similarity in results:
+        if not current_user.is_admin and comment.user_id != current_user.id:
+            continue
+        items.append(
+            CommentSearchResponse(
+                id=comment.id,
+                text=comment.text,
+                original_author=comment.original_author,
+                source_url=comment.source_url,
+                source_platform=comment.source_platform,
+                status=comment.status.value if hasattr(comment.status, "value") else comment.status,
+                similarity=round(similarity, 4),
+                created_at=comment.created_at,
+            )
+        )
+    return items
 
 
 @router.get("/{comment_id}", response_model=CommentResponse)
@@ -142,8 +176,6 @@ async def get_comment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Comment not found",
         )
-    
-    # Check access
     if not current_user.is_admin and comment.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -160,30 +192,16 @@ async def get_comment(
         source_platform=comment.source_platform,
         context=comment.context,
         user_id=comment.user_id,
-        status=comment.status.value,
-        priority=comment.priority.value,
+        status=comment.status.value if hasattr(comment.status, "value") else comment.status,
+        priority=comment.priority.value if hasattr(comment.priority, "value") else comment.priority,
         processed_at=comment.processed_at,
         processing_started_at=comment.processing_started_at,
         error_message=comment.error_message,
-        metadata=comment.metadata,
+        metadata=comment.extra_metadata,
         created_at=comment.created_at,
         updated_at=comment.updated_at,
         classifications=[
-            {
-                "id": c.id,
-                "backend": c.backend.value,
-                "flagged": c.flagged,
-                "flagged_by": c.flagged_by,
-                "category": c.category.value if c.category else None,
-                "category_label": c.category_label,
-                "scores": c.scores,
-                "confidence": c.confidence,
-                "severity": c.severity.value if c.severity else None,
-                "severity_label": c.severity_label,
-                "harmful": c.harmful,
-                "threshold": c.threshold,
-                "created_at": c.created_at,
-            }
+            classification_to_response(c).model_dump(mode="json")
             for c in comment.classifications
         ] if comment.classifications else None,
     )
@@ -196,11 +214,9 @@ async def create_comment_endpoint(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> CommentResponse:
     """Create a new comment."""
-    # Set user_id to current user
     comment_data = comment_create.model_dump()
     comment_data["user_id"] = current_user.id
     
-    # Set priority
     if comment_create.priority:
         try:
             comment_data["priority"] = CommentPriority(comment_create.priority.lower())
@@ -226,7 +242,7 @@ async def create_comment_endpoint(
         processed_at=comment.processed_at,
         processing_started_at=comment.processing_started_at,
         error_message=comment.error_message,
-        metadata=comment.metadata,
+        metadata=comment.extra_metadata,
         created_at=comment.created_at,
         updated_at=comment.updated_at,
         classifications=None,
@@ -236,20 +252,18 @@ async def create_comment_endpoint(
 @router.post("/upload", response_model=CSVUploadResponse)
 async def upload_csv(
     request: Request,
-    file: UploadFile = File(...),
     db: Annotated[AsyncSession, Depends(get_async_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
+    file: UploadFile = File(...),
 ) -> CSVUploadResponse:
     """
     Upload CSV file with comments to classify.
     
     Processes the CSV file and queues comments for classification.
     """
-    # Validate file size
     max_size_mb = settings.max_csv_size_mb
     max_size_bytes = max_size_mb * 1024 * 1024
     
-    # Read file content to check size
     content = await file.read()
     
     if len(content) > max_size_bytes:
@@ -260,11 +274,8 @@ async def upload_csv(
     
     # Reset file pointer
     file.file.seek(0)
-    
-    # Generate batch ID
     batch_id = str(uuid.uuid4())
     
-    # Process CSV file
     result = await process_csv_file(
         db=db,
         file=file,
@@ -299,8 +310,6 @@ async def update_comment_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Comment not found",
         )
-    
-    # Check access
     if not current_user.is_admin and comment.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -319,30 +328,16 @@ async def update_comment_endpoint(
         source_platform=comment.source_platform,
         context=comment.context,
         user_id=comment.user_id,
-        status=comment.status.value,
-        priority=comment.priority.value,
+        status=comment.status.value if hasattr(comment.status, "value") else comment.status,
+        priority=comment.priority.value if hasattr(comment.priority, "value") else comment.priority,
         processed_at=comment.processed_at,
         processing_started_at=comment.processing_started_at,
         error_message=comment.error_message,
-        metadata=comment.metadata,
+        metadata=comment.extra_metadata,
         created_at=comment.created_at,
         updated_at=comment.updated_at,
         classifications=[
-            {
-                "id": c.id,
-                "backend": c.backend.value,
-                "flagged": c.flagged,
-                "flagged_by": c.flagged_by,
-                "category": c.category.value if c.category else None,
-                "category_label": c.category_label,
-                "scores": c.scores,
-                "confidence": c.confidence,
-                "severity": c.severity.value if c.severity else None,
-                "severity_label": c.severity_label,
-                "harmful": c.harmful,
-                "threshold": c.threshold,
-                "created_at": c.created_at,
-            }
+            classification_to_response(c).model_dump(mode="json")
             for c in comment.classifications
         ] if comment.classifications else None,
     )
@@ -362,8 +357,6 @@ async def delete_comment_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Comment not found",
         )
-    
-    # Check access
     if not current_user.is_admin and comment.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -389,8 +382,6 @@ async def get_comment_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Comment not found",
         )
-    
-    # Check access
     if not current_user.is_admin and comment.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

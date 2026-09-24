@@ -31,7 +31,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       const response = await authApi.me();
-      setUser(response.data.user as User);
+      const data = response.data as unknown as User & { full_name?: string | null };
+      setUser({ ...data, name: data.full_name ?? data.name ?? '' });
       setAccessToken(token);
     } catch {
       // Clear any stale tokens
@@ -49,11 +50,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
       const response = await authApi.login(data);
-      const { access_token, user: userData } = response.data as LoginResponse & { user: User };
-      
+      const { access_token, refresh_token, user: userData } = response.data as LoginResponse & { user: User };
+
       localStorage.setItem('access_token', access_token);
+      if (refresh_token) {
+        localStorage.setItem('refresh_token', refresh_token);
+      }
       localStorage.setItem('user', JSON.stringify(userData));
-      
+
       setUser(userData);
       setAccessToken(access_token);
     } finally {
@@ -113,9 +117,4 @@ export const useAuth = (): AuthContextType => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
-
-export const useUser = () => {
-  const { user, isAuthenticated, isLoading } = useAuth();
-  return { user, isAuthenticated, isLoading };
 };

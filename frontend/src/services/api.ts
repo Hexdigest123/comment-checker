@@ -1,9 +1,8 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
-import type { ApiError } from '../types';
+import type { ApiError, CommentSearchResult, GraphData, AIChatResponse, ImportStatus } from '../types';
 
-// Create API client
 const api: AxiosInstance = axios.create({
-  baseURL: import.meta.env.PUBLIC_API_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -41,7 +40,7 @@ api.interceptors.response.use(
         }
 
         const response = await axios.post(
-          `${import.meta.env.PUBLIC_API_URL || 'http://localhost:8000'}/auth/refresh`,
+          `${import.meta.env.PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/auth/refresh`,
           { refresh_token: refreshToken },
           { headers: { 'Content-Type': 'application/json' } }
         );
@@ -76,7 +75,7 @@ api.interceptors.response.use(
 
 // Auth API
 export const authApi = {
-  login: (data: { email: string; password: string }) =>
+  login: (data: { username: string; password: string }) =>
     api.post<{ access_token: string; token_type: string; user: unknown }>('/auth/login', data),
 
   refresh: (refreshToken: string) =>
@@ -84,21 +83,7 @@ export const authApi = {
 
   logout: () => api.post('/auth/logout'),
 
-  me: () => api.get<{ user: unknown }>('/auth/me'),
-};
-
-// User API
-export const userApi = {
-  list: (params?: { page?: number; page_size?: number; search?: string }) =>
-    api.get('/users', { params }),
-
-  get: (id: string) => api.get(`/users/${id}`),
-
-  create: (data: unknown) => api.post('/users', data),
-
-  update: (id: string, data: unknown) => api.put(`/users/${id}`, data),
-
-  delete: (id: string) => api.delete(`/users/${id}`),
+  me: () => api.get<{ id: number; username: string; full_name: string | null; is_active: boolean; is_admin: boolean }>('/users/me'),
 };
 
 // Comment API
@@ -117,14 +102,19 @@ export const commentApi = {
   uploadCSV: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post('/comments/upload-csv', formData, {
+    return api.post('/comments/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
 
-  classify: (id: string) => api.post(`/comments/${id}/classify`),
+  classify: (id: string) => api.post(`/classifications/${id}/classify`),
 
-  reclassify: (id: string) => api.post(`/comments/${id}/reclassify`),
+  reclassify: (id: string) => api.post(`/classifications/${id}/classify`),
+
+  semanticSearch: (query: string, limit = 10) =>
+    api.get<CommentSearchResult[]>('/comments/search/semantic', {
+      params: { query, limit },
+    }),
 };
 
 // Classification API
@@ -137,43 +127,43 @@ export const classificationApi = {
   stats: () => api.get('/classifications/stats'),
 };
 
-// Dashboard API
-export const dashboardApi = {
-  stats: (params?: { start_date?: string; end_date?: string }) =>
-    api.get('/dashboard/stats', { params }),
+// Cluster / graph API
+export const clusterApi = {
+  graph: () => api.get<GraphData>('/clusters/graph'),
 
-  statusDistribution: (params?: { start_date?: string; end_date?: string }) =>
-    api.get('/dashboard/status-distribution', { params }),
+  clusterGraph: (clusterId: string) => api.get<GraphData>(`/clusters/${clusterId}/graph`),
 
-  categoryDistribution: (params?: { start_date?: string; end_date?: string }) =>
-    api.get('/dashboard/category-distribution', { params }),
+  list: (params?: Record<string, string | number>) => api.get('/clusters', { params }),
 };
 
-// Invite API
-export const inviteApi = {
-  list: () => api.get('/invites'),
+// AI assistant API (agentic workflow — tools are always enabled)
+export const aiApi = {
+  chat: (message: string, sessionId?: string | null) =>
+    api.post<AIChatResponse>('/ai/chat', {
+      message,
+      session_id: sessionId,
+    }),
 
-  create: (email: string) => api.post('/invites', { email }),
+  conversations: (sessionId?: string) =>
+    api.get('/ai/conversations', { params: sessionId ? { session_id: sessionId } : {} }),
 
-  get: (token: string) => api.get(`/invites/${token}`),
+  sessions: () => api.get<string[]>('/ai/sessions'),
 
-  use: (token: string, data: { name: string; password: string }) =>
-    api.post(`/invites/${token}/use`, data),
+  stats: () => api.get('/ai/stats'),
 
-  delete: (token: string) => api.delete(`/invites/${token}`),
+  deleteSession: (sessionId: string) => api.delete(`/ai/sessions/${sessionId}`),
 };
 
-// Password Reset API
-export const passwordResetApi = {
-  request: (email: string) => api.post('/password-reset/request', { email }),
+// Import API (ExportComments.com)
+export const importApi = {
+  status: () => api.get<ImportStatus>('/import/exportcomments/status'),
 
-  confirm: (token: string, password: string) =>
-    api.post('/password-reset/confirm', { token, password }),
-};
-
-// Health check
-export const healthApi = {
-  check: () => api.get('/health'),
+  fromUrl: (data: {
+    url: string;
+    context?: string;
+    include_replies?: boolean;
+    max_comments?: number;
+  }) => api.post('/import/exportcomments', data),
 };
 
 export default api;

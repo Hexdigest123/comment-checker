@@ -5,13 +5,13 @@ Provides statistics and insights for the dashboard
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
-from sqlalchemy import select, func, and_, or_, desc
+from sqlalchemy import select, func, and_, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..db.models import Comment, CommentStatus, Classification, ClassificationCategory, ClassificationSeverity, ClassificationBackend
+from ..db.models import Comment, CommentStatus, Classification, ClassificationCategory, ClassificationBackend
 from ..schemas import (
     DashboardStatsResponse,
     DashboardSummaryResponse,
@@ -19,28 +19,27 @@ from ..schemas import (
     StatusDistributionResponse,
 )
 
-# Get settings
 settings = get_settings()
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
 
-def get_date_range_filter(date_range: str = None) -> Any:
+def get_date_range_filter(date_range: str = None, column: Any = Comment.created_at) -> Any:
     """
     Get SQLAlchemy filter for date range.
-    
+
     Args:
         date_range: Date range string (1m, 6m, 1y, all)
-        
+        column: Timestamp column to filter on
+
     Returns:
         SQLAlchemy filter condition
     """
     if not date_range or date_range == "all":
         return None
-    
+
     now = datetime.utcnow()
-    
+
     if date_range == "1m":
         start_date = now - timedelta(days=30)
     elif date_range == "6m":
@@ -49,8 +48,8 @@ def get_date_range_filter(date_range: str = None) -> Any:
         start_date = now - timedelta(days=365)
     else:
         return None
-    
-    return Comment.created_at >= start_date
+
+    return column >= start_date
 
 
 async def get_status_counts(
@@ -73,7 +72,7 @@ async def get_status_counts(
     for status in CommentStatus:
         filter_cond = and_(
             Comment.status == status,
-            date_filter if date_filter else True,
+            date_filter if date_filter is not None else true(),
         )
         result = await db.execute(
             select(func.count())
@@ -98,17 +97,13 @@ async def get_category_distribution(
     Returns:
         List of category distribution items
     """
-    from sqlalchemy import case
     
-    date_filter = get_date_range_filter(date_range)
-    
-    # Build filter for classifications with date range
+    date_filter = get_date_range_filter(date_range, Classification.created_at)
     classification_filter = and_(
         Classification.category.isnot(None),
-        date_filter if date_filter else True,
-    ) if date_filter else Classification.category.isnot(None)
+        date_filter if date_filter is not None else true(),
+    ) if date_filter is not None else Classification.category.isnot(None)
     
-    # Get total count
     total_result = await db.execute(
         select(func.count())
         .where(classification_filter)
@@ -134,8 +129,6 @@ async def get_category_distribution(
         
         if count > 0:
             percentage = round((count / total * 100), 2)
-            
-            # Get label
             category_labels = {
                 ClassificationCategory.HATE: "Hate",
                 ClassificationCategory.HARASSMENT: "Harassment",
@@ -156,8 +149,6 @@ async def get_category_distribution(
                     percentage=percentage,
                 )
             )
-    
-    # Sort by count descending
     distribution.sort(key=lambda x: x.count, reverse=True)
     
     return distribution
@@ -195,8 +186,6 @@ async def get_status_distribution(
                     percentage=percentage,
                 )
             )
-    
-    # Sort by count descending
     distribution.sort(key=lambda x: x.count, reverse=True)
     
     return distribution
@@ -216,14 +205,14 @@ async def get_backend_distribution(
     Returns:
         Dictionary with backend counts
     """
-    date_filter = get_date_range_filter(date_range)
-    
+    date_filter = get_date_range_filter(date_range, Classification.created_at)
+
     distribution = {}
     
     for backend in ClassificationBackend:
         filter_cond = and_(
             Classification.backend == backend,
-            date_filter if date_filter else True,
+            date_filter if date_filter is not None else true(),
         )
         result = await db.execute(
             select(func.count())
@@ -248,55 +237,49 @@ async def get_dashboard_stats(
     Returns:
         Dashboard statistics response
     """
-    # Get status counts
     status_counts = await get_status_counts(db, date_range)
     
-    # Get total comments
     date_filter = get_date_range_filter(date_range)
     total_comments_result = await db.execute(
         select(func.count())
-        .where(date_filter if date_filter else True)
+        .select_from(Comment)
+        .where(date_filter if date_filter is not None else true())
     )
     total_comments = total_comments_result.scalar()
-    
-    # Get total classifications
+
     total_classifications_result = await db.execute(
         select(func.count())
+        .select_from(Classification)
     )
     total_classifications = total_classifications_result.scalar()
     
-    # Get flagged counts
+    classification_date_filter = get_date_range_filter(date_range, Classification.created_at)
     flagged_result = await db.execute(
         select(func.count())
         .where(
             and_(
-                Classification.flagged == True,
-                date_filter if date_filter else True,
+                Classification.category != ClassificationCategory.SAFE,
+                classification_date_filter if classification_date_filter is not None else true(),
             )
         )
     )
     total_flagged = flagged_result.scalar()
-    
+
     total_not_flagged = total_comments - total_flagged
     flagged_percentage = round((total_flagged / total_comments * 100) if total_comments > 0 else 0, 2)
-    
-    # Get average harmful
+
     avg_harmful_result = await db.execute(
-        select(func.avg(Classification.harmful))
-        .where(date_filter if date_filter else True)
+        select(func.avg(Classification.harmful_score))
+        .where(classification_date_filter if classification_date_filter is not None else true())
     )
     avg_harmful = float(avg_harmful_result.scalar() or 0)
     
-    # Get status distribution
     status_distribution = await get_status_distribution(db, date_range)
     
-    # Get category distribution
     category_distribution = await get_category_distribution(db, date_range)
     
-    # Get backend distribution
     backend_distribution = await get_backend_distribution(db, date_range)
     
-    # Build summary
     summary = DashboardSummaryResponse(
         total_comments=total_comments,
         total_classifications=total_classifications,
