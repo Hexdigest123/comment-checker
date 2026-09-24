@@ -32,7 +32,10 @@ class PageParams(BaseModel):
     
     # Category filter
     category: Optional[str] = Field(default=None, description="Filter by category")
-    
+
+    # Severity filter
+    severity: Optional[str] = Field(default=None, description="Filter by severity")
+
     # Backend filter
     backend: Optional[str] = Field(default=None, description="Filter by backend")
     

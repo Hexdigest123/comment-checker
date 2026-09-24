@@ -3,6 +3,7 @@
 from .user import User
 from .token import RefreshToken, TokenStatus
 from .comment import Comment, CommentStatus, CommentPriority
+from .comment_mention import CommentMention
 from .classification import (
     Classification,
     ClassificationBackend,
@@ -24,6 +25,7 @@ __all__ = [
     "Comment",
     "CommentStatus",
     "CommentPriority",
+    "CommentMention",
     "Classification",
     "ClassificationBackend",
     "ClassificationCategory",

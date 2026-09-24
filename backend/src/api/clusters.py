@@ -48,14 +48,19 @@ router = APIRouter(tags=["Clusters"])
 async def get_full_graph(
     db: Annotated[AsyncSession, Depends(get_async_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
+    include_comments: bool = True,
 ) -> ClusterGraphResponse:
     """
     Get the full entity graph: clusters, their accounts, and connections.
 
     Returns nodes and links for force-directed graph visualization.
+    When include_comments is true, each comment authored by an account is
+    returned as a node linked to that account.
     """
     clustering_service = ClusteringService(db)
-    graph_data = await clustering_service.get_cluster_graph(None)
+    graph_data = await clustering_service.get_cluster_graph(
+        None, include_comments=include_comments
+    )
 
     return ClusterGraphResponse(
         nodes=graph_data["nodes"],
@@ -460,6 +465,7 @@ async def get_cluster_graph(
     db: Annotated[AsyncSession, Depends(get_async_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
     cluster_id: Optional[str] = None,
+    include_comments: bool = True,
 ) -> ClusterGraphResponse:
     """
     Get cluster graph data for visualization.
@@ -468,9 +474,12 @@ async def get_cluster_graph(
     
     Args:
         cluster_id: Optional cluster ID to focus on (returns connected clusters)
+        include_comments: Whether to include comment nodes linked to accounts
     """
     clustering_service = ClusteringService(db)
-    graph_data = await clustering_service.get_cluster_graph(cluster_id)
+    graph_data = await clustering_service.get_cluster_graph(
+        cluster_id, include_comments=include_comments
+    )
     
     return ClusterGraphResponse(
         nodes=graph_data["nodes"],

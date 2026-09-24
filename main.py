@@ -26,6 +26,35 @@ parser = argparse.ArgumentParser(
 )
 
 
+def derive_confidence_and_severity(scores: dict, flagged: bool):
+    """Derive confidence and severity from the moderation label scores.
+
+    Mirrors backend/src/services/classification.py: the decision score is
+    the highest score among the category-mapped labels; confidence is the
+    winning label's score when flagged, or 1 - max score when safe, and
+    severity is binned from the winning score (safe comments are low).
+    """
+    mapped_labels = {
+        "hate_and_discrimination", "violence_and_threats", "dangerous",
+        "criminal", "selfharm", "sexual", "hate_speech",
+    }
+    mapped_scores = [
+        score for label, score in scores.items() if label in mapped_labels
+    ]
+    max_score = max(mapped_scores, default=0.0)
+    if not flagged:
+        return round(max(1.0 - max_score, 0.0), 4), "low"
+    if max_score >= 0.9:
+        severity = "critical"
+    elif max_score >= 0.7:
+        severity = "high"
+    elif max_score >= 0.5:
+        severity = "medium"
+    else:
+        severity = "low"
+    return round(min(max_score, 1.0), 4), severity
+
+
 def classify_mistral(client, comment: str, threshold: float, fallback: bool = True):
     """Run the Mistral Moderation 2 pipeline.
 
@@ -44,6 +73,7 @@ def classify_mistral(client, comment: str, threshold: float, fallback: bool = Tr
             scores["hate_speech"] = 1.0
             flagged_by = "mistral_fallback"
     flagged = any(flags.values())
+    confidence, severity = derive_confidence_and_severity(scores, flagged)
     return {
         "backend": "mistral",
         "scores": scores,
@@ -51,8 +81,8 @@ def classify_mistral(client, comment: str, threshold: float, fallback: bool = Tr
         "flagged": flagged,
         "flagged_by": flagged_by,
         "category": None,
-        "confidence": None,
-        "severity": None,
+        "confidence": confidence,
+        "severity": severity,
         "harmful": float(flags.get("hate_speech", False)),
     }
 
@@ -292,9 +322,9 @@ if __name__ == "__main__":
         "--predict",
         "-p",
         nargs="?",
-        const="assets/test-data.csv",
+        const="assets/test-20.csv",
         metavar="FILE",
-        help="Classify a CSV file (default: assets/test-data.csv)",
+        help="Classify a CSV file (default: assets/test-20.csv)",
     )
     
     parser.add_argument(

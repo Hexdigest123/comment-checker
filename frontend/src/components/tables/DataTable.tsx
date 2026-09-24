@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 import type { PaginatedResourceActions, PaginatedResourceState } from '../../hooks/usePaginatedResource';
 
 export interface Column<T> {
@@ -25,6 +26,7 @@ export interface DataTableProps<T> {
   filterOptions?: FilterOption[];
   emptyMessage?: string;
   onRowClick?: (item: T) => void;
+  rowClassName?: (item: T) => string;
   toolbar?: React.ReactNode;
 }
 
@@ -45,6 +47,7 @@ export const DataTable = <T,>({
   filterOptions = [],
   emptyMessage = 'No data available',
   onRowClick,
+  rowClassName,
   toolbar,
 }: DataTableProps<T>) => {
   const [searchInput, setSearchInput] = useState(resource.search);
@@ -80,7 +83,8 @@ export const DataTable = <T,>({
 
   const getSortIndicator = (key: string) => {
     if (resource.sortBy !== key) return null;
-    return resource.sortOrder === 'asc' ? '↑' : '↓';
+    const Icon = resource.sortOrder === 'asc' ? ChevronUp : ChevronDown;
+    return <Icon size={12} aria-hidden />;
   };
 
   const totalPages = Math.max(1, Math.ceil(resource.total / resource.pageSize));
@@ -165,7 +169,7 @@ export const DataTable = <T,>({
               resource.items.map((item, index) => (
                 <tr
                   key={(item as { id?: string | number }).id ?? index}
-                  className={`border-b border-mistral-border last:border-b-0 hover:bg-mistral-surface transition-colors duration-200 ${onRowClick ? 'cursor-pointer' : ''}`}
+                  className={`border-b border-mistral-border last:border-b-0 hover:bg-mistral-surface transition-colors duration-200 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName ? rowClassName(item) : ''}`}
                   onClick={onRowClick ? () => onRowClick(item) : undefined}
                 >
                   {columns.map((column) => (
@@ -288,6 +292,11 @@ export const CategoryBadge: React.FC<{ category: string | null; className?: stri
     sexual: 'bg-mistral-pink-tint border-mistral-pink/40 text-mistral-ink',
     spam: 'bg-mistral-band border-mistral-border-strong text-mistral-muted',
     illegal: 'bg-mistral-ink border-transparent text-mistral-surface',
+    financial: 'bg-mistral-yellow-tint border-mistral-yellow/50 text-mistral-ink',
+    health: 'bg-mistral-blue-tint border-mistral-blue/40 text-mistral-ink',
+    legal: 'bg-mistral-blue-tint border-mistral-blue/60 text-mistral-ink',
+    pii: 'bg-mistral-orange-tint border-mistral-orange/50 text-mistral-ink',
+    jailbreaking: 'bg-mistral-inset border-mistral-border-strong text-mistral-muted',
     safe: 'bg-mistral-green-tint border-mistral-green/50 text-mistral-ink',
   };
   return (

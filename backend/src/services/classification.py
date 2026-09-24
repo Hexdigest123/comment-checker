@@ -7,7 +7,7 @@ import logging
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import select, desc, asc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,6 +47,41 @@ def classification_to_response(c: Classification) -> ClassificationResponse:
     )
 
 
+def _severity_from_score(score: float) -> ClassificationSeverity:
+    """Bin a moderation score into a severity level."""
+    if score >= 0.9:
+        return ClassificationSeverity.CRITICAL
+    if score >= 0.7:
+        return ClassificationSeverity.HIGH
+    if score >= 0.5:
+        return ClassificationSeverity.MEDIUM
+    return ClassificationSeverity.LOW
+
+
+def _confidence_and_severity(
+    scores: Dict[str, float],
+    flagged: bool,
+) -> Tuple[float, ClassificationSeverity]:
+    """
+    Derive confidence and severity from the moderation label scores.
+
+    The decision score is the highest score among the category-mapped
+    labels (the label that drove the verdict; the in-context fallback
+    injects hate_speech = 1.0, so it feeds through the same path).
+
+    confidence expresses certainty in the assigned category: the winning
+    label's score when flagged, or 1 - max score when safe.
+    severity is binned from the winning label's score; safe comments are LOW.
+    """
+    mapped_scores = [
+        score for label, score in scores.items() if label in MODERATION_LABEL_TO_CATEGORY
+    ]
+    max_score = max(mapped_scores, default=0.0)
+    if flagged:
+        return round(min(max_score, 1.0), 4), _severity_from_score(max_score)
+    return round(max(1.0 - max_score, 0.0), 4), ClassificationSeverity.LOW
+
+
 async def classify_with_mistral(
     comment_text: str,
     context: Optional[str] = None,
@@ -74,36 +109,38 @@ async def classify_with_mistral(
         # First pass: Mistral Moderation 2
         scores = client.classify(comment_text)
         flags = {label: score >= threshold for label, score in scores.items()}
-        flagged_by = "mistral_moderation"
-        
+        flagged = any(flags.values())
+        confidence, severity = _confidence_and_severity(scores, flagged)
+        flagged_by = "mistral_moderation" if flagged else None
+
         # Second pass: In-context fallback if not flagged
-        if not any(flags.values()) and fallback:
+        if not flagged and fallback:
             second_opinion = client.check_with_context(comment_text)
             if second_opinion:
                 flags["hate_speech"] = True
                 scores["hate_speech"] = 1.0
+                flagged = True
+                confidence, severity = _confidence_and_severity(scores, True)
                 flagged_by = "mistral_fallback"
-        
+
         return {
             "backend": "mistral",
             "scores": scores,
-            "flagged": any(flags.values()),
+            "flagged": flagged,
             "flagged_by": flagged_by,
             "category": None,
-            "confidence": None,
-            "severity": None,
-            "harmful": float(flags.get("hate_speech", False)),
+            "confidence": confidence,
+            "severity": severity.value,
+            "harmful": round(max(scores.values(), default=0.0), 4),
         }
     except Exception as e:
         logger.error(f"Mistral classification error: {e}")
         raise ClassificationError(f"Mistral classification failed: {e}")
 
 
-# Maps Mistral Moderation 2 labels (mistral-moderation-2603) plus the
-# mistral-small fallback's injected "hate_speech" score to the
-# classification categories we store.
-# Moderation 2 labels without a matching category (financial, health, law,
-# pii, jailbreaking) are intentionally unmapped and fall through to SAFE.
+# Maps every Mistral Moderation 2 label (mistral-moderation-2603) plus the
+# mistral-small fallback's injected "hate_speech" score to the classification
+# categories we store.
 MODERATION_LABEL_TO_CATEGORY = {
     # Mistral Moderation 2 labels
     "hate_and_discrimination": ClassificationCategory.HATE,
@@ -112,6 +149,11 @@ MODERATION_LABEL_TO_CATEGORY = {
     "criminal": ClassificationCategory.ILLEGAL,
     "selfharm": ClassificationCategory.SELF_HARM,
     "sexual": ClassificationCategory.SEXUAL,
+    "financial": ClassificationCategory.FINANCIAL,
+    "health": ClassificationCategory.HEALTH,
+    "law": ClassificationCategory.LEGAL,
+    "pii": ClassificationCategory.PII,
+    "jailbreaking": ClassificationCategory.JAILBREAKING,
     # Injected by the mistral-small in-context fallback
     "hate_speech": ClassificationCategory.HATE,
 }

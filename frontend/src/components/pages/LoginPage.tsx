@@ -45,7 +45,7 @@ const LoginPage = () => {
         <div className="text-center mb-8">
           <span className="eyebrow-badge">Moderation console</span>
           <h1 className="mt-4 font-display text-3xl font-semibold text-mistral-ink">
-            Comment <span className="marker-highlight">Checker</span>
+            Comment Checker
           </h1>
           <p className="text-mistral-muted mt-2">Sign in to your account</p>
         </div>

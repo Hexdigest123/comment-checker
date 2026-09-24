@@ -7,20 +7,31 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, UploadFile, File, status
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import or_, and_, select
 
 from ..config import get_settings
 from ..db.session import get_async_db
-from ..db.models import Comment, CommentStatus, CommentPriority, ExternalAccount, User
+from ..db.models import (
+    Comment,
+    CommentStatus,
+    CommentPriority,
+    ExternalAccount,
+    User,
+    Classification,
+    ClassificationCategory,
+    ClassificationSeverity,
+)
 from ..schemas import (
     CommentCreate,
     CommentUpdate,
     CommentResponse,
     CommentListResponse,
+    CommentMentionResponse,
     CommentSearchResponse,
+    CommentVoteResponse,
     CommentStatusResponse,
     PageParams,
     PageResponse,
@@ -42,6 +53,31 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Comments"])
+
+
+def _platform_value(platform) -> Optional[str]:
+    """Return the string value of a platform enum member or None."""
+    if platform is None:
+        return None
+    return str(platform.value) if hasattr(platform, "value") else str(platform)
+
+
+def _mentions_response(comment: Comment) -> Optional[list[CommentMentionResponse]]:
+    """Build mention response models for a comment with loaded mentions."""
+    if not comment.mentions:
+        return None
+    return [
+        CommentMentionResponse(
+            account_id=m.external_account.id,
+            username=m.external_account.username,
+            display_name=m.external_account.display_name,
+            platform=_platform_value(m.external_account.platform),
+            profile_url=m.external_account.profile_url,
+            cluster_id=m.external_account.cluster_id,
+            mentioned_username=m.mentioned_username,
+        )
+        for m in comment.mentions
+    ]
 
 
 @router.get("/", response_model=PageResponse[CommentListResponse])
@@ -93,7 +129,35 @@ async def list_comments(
             filter_conditions.append(Comment.created_at <= end_date)
         except ValueError:
             pass
-    
+
+    # Classification filters: comments having at least one
+    # classification with the requested category/severity
+    if params.category:
+        try:
+            category_enum = ClassificationCategory(params.category.lower())
+            filter_conditions.append(
+                Comment.id.in_(
+                    select(Classification.comment_id).where(
+                        Classification.category == category_enum
+                    )
+                )
+            )
+        except ValueError:
+            pass
+
+    if params.severity:
+        try:
+            severity_enum = ClassificationSeverity(params.severity.lower())
+            filter_conditions.append(
+                Comment.id.in_(
+                    select(Classification.comment_id).where(
+                        Classification.severity == severity_enum
+                    )
+                )
+            )
+        except ValueError:
+            pass
+
     # Entity graph filters: comments authored by an account, or by any account in a cluster
     if account_id:
         filter_conditions.append(Comment.external_account_id == account_id)
@@ -210,6 +274,7 @@ async def get_comment(
         user_id=comment.user_id,
         status=comment.status.value if hasattr(comment.status, "value") else comment.status,
         priority=comment.priority.value if hasattr(comment.priority, "value") else comment.priority,
+        vote_score=comment.vote_score,
         processed_at=comment.processed_at,
         processing_started_at=comment.processing_started_at,
         error_message=comment.error_message,
@@ -220,6 +285,7 @@ async def get_comment(
             classification_to_response(c).model_dump(mode="json")
             for c in comment.classifications
         ] if comment.classifications else None,
+        mentions=_mentions_response(comment),
     )
 
 
@@ -242,7 +308,10 @@ async def create_comment_endpoint(
         comment_data["priority"] = CommentPriority.MEDIUM
     
     comment = await create_comment(db, comment_data)
-    
+
+    # Re-fetch with mentions loaded for the response
+    comment = await get_comment_by_id(db, comment.id)
+
     return CommentResponse(
         id=comment.id,
         text=comment.text,
@@ -255,6 +324,7 @@ async def create_comment_endpoint(
         user_id=comment.user_id,
         status=comment.status.value,
         priority=comment.priority.value,
+        vote_score=comment.vote_score,
         processed_at=comment.processed_at,
         processing_started_at=comment.processing_started_at,
         error_message=comment.error_message,
@@ -262,6 +332,7 @@ async def create_comment_endpoint(
         created_at=comment.created_at,
         updated_at=comment.updated_at,
         classifications=None,
+        mentions=_mentions_response(comment),
     )
 
 
@@ -271,6 +342,10 @@ async def upload_csv(
     db: Annotated[AsyncSession, Depends(get_async_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
     file: UploadFile = File(...),
+    context: Optional[str] = Form(
+        default=None,
+        description="Context the comments react to (used for classification)",
+    ),
 ) -> CSVUploadResponse:
     """
     Upload CSV file with comments to classify.
@@ -297,9 +372,14 @@ async def upload_csv(
         file=file,
         user_id=current_user.id,
         batch_id=batch_id,
+        default_context=context,
     )
     
-    logger.info(f"CSV uploaded by user {current_user.id}: {result['valid_rows']} valid rows, {result['invalid_rows']} invalid rows")
+    logger.info(
+        f"CSV uploaded by user {current_user.id}: "
+        f"{result['valid_rows']} valid rows, {result['invalid_rows']} invalid rows, "
+        f"{result['duplicates_skipped']} duplicates skipped"
+    )
     
     return CSVUploadResponse(
         message="CSV file uploaded successfully",
@@ -307,6 +387,7 @@ async def upload_csv(
         total_rows=result["total_rows"],
         valid_rows=result["valid_rows"],
         invalid_rows=result["invalid_rows"],
+        duplicates_skipped=result["duplicates_skipped"],
         processing=True,
     )
 
@@ -333,7 +414,10 @@ async def update_comment_endpoint(
         )
     
     comment = await update_comment(db, comment_id, comment_update)
-    
+
+    # Re-fetch with mentions loaded for the response
+    comment = await get_comment_by_id(db, comment.id)
+
     return CommentResponse(
         id=comment.id,
         text=comment.text,
@@ -346,6 +430,7 @@ async def update_comment_endpoint(
         user_id=comment.user_id,
         status=comment.status.value if hasattr(comment.status, "value") else comment.status,
         priority=comment.priority.value if hasattr(comment.priority, "value") else comment.priority,
+        vote_score=comment.vote_score,
         processed_at=comment.processed_at,
         processing_started_at=comment.processing_started_at,
         error_message=comment.error_message,
@@ -356,6 +441,7 @@ async def update_comment_endpoint(
             classification_to_response(c).model_dump(mode="json")
             for c in comment.classifications
         ] if comment.classifications else None,
+        mentions=_mentions_response(comment),
     )
 
 
@@ -410,4 +496,57 @@ async def get_comment_status(
         processed_at=comment.processed_at,
         processing_started_at=comment.processing_started_at,
         error_message=comment.error_message,
+    )
+
+
+@router.post("/{comment_id}/upvote", response_model=CommentVoteResponse)
+async def upvote_comment(
+    comment_id: int,
+    db: Annotated[AsyncSession, Depends(get_async_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+) -> CommentVoteResponse:
+    """Upvote a comment (raises its vote score by one)."""
+    return await _vote_comment(db, current_user, comment_id, +1)
+
+
+@router.post("/{comment_id}/downvote", response_model=CommentVoteResponse)
+async def downvote_comment(
+    comment_id: int,
+    db: Annotated[AsyncSession, Depends(get_async_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+) -> CommentVoteResponse:
+    """Downvote a comment (lowers its vote score by one; below 0 = false flag)."""
+    return await _vote_comment(db, current_user, comment_id, -1)
+
+
+async def _vote_comment(
+    db: AsyncSession,
+    current_user: User,
+    comment_id: int,
+    delta: int,
+) -> CommentVoteResponse:
+    """Apply a vote (+1/-1) to a comment and return the new score."""
+    comment = await get_comment_by_id(db, comment_id)
+
+    if comment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Comment not found",
+        )
+    if not current_user.is_admin and comment.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+
+    comment.vote_score = comment.vote_score + delta
+    await db.commit()
+    await db.refresh(comment)
+
+    logger.info(f"Comment {comment_id} voted ({'up' if delta > 0 else 'down'}): score={comment.vote_score}")
+
+    return CommentVoteResponse(
+        id=comment.id,
+        vote_score=comment.vote_score,
+        false_flag=comment.is_false_flag,
     )

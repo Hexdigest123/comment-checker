@@ -11,6 +11,7 @@ from ..base import Base
 
 if TYPE_CHECKING:
     from .comment import Comment
+    from .comment_mention import CommentMention
     from .account_cluster import AccountCluster
 
 
@@ -81,6 +82,11 @@ class ExternalAccount(Base):
         "Comment", 
         back_populates="external_account",
         foreign_keys="Comment.external_account_id"
+    )
+    mentions: Mapped[list["CommentMention"]] = relationship(
+        "CommentMention",
+        back_populates="external_account",
+        cascade="all, delete-orphan",
     )
     
     # Metadata

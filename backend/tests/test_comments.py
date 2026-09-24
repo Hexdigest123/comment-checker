@@ -15,13 +15,13 @@ class TestCommentsList:
         """Test listing comments when authenticated."""
         # Login
         login_response = client.post(
-            '/auth/login',
+            '/api/v1/auth/login',
             json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
         response = client.get(
-            '/comments',
+            '/api/v1/comments',
             headers={'Authorization': f'Bearer {token}'},
         )
         
@@ -33,7 +33,7 @@ class TestCommentsList:
     @pytest.mark.asyncio
     async def test_list_comments_unauthenticated(self, client):
         """Test listing comments when not authenticated."""
-        response = client.get('/comments')
+        response = client.get('/api/v1/comments')
         assert response.status_code == 401
 
     @pytest.mark.asyncio
@@ -41,14 +41,14 @@ class TestCommentsList:
         """Test listing comments with filters."""
         # Login
         login_response = client.post(
-            '/auth/login',
+            '/api/v1/auth/login',
             json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
         # Filter by status
         response = client.get(
-            '/comments?status=pending',
+            '/api/v1/comments?status=pending',
             headers={'Authorization': f'Bearer {token}'},
         )
         
@@ -65,13 +65,13 @@ class TestCommentsCreate:
         """Test creating comment when authenticated."""
         # Login
         login_response = client.post(
-            '/auth/login',
+            '/api/v1/auth/login',
             json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
         response = client.post(
-            '/comments',
+            '/api/v1/comments',
             json={
                 'text': 'New comment text',
                 'source_url': 'https://example.com/comment/2',
@@ -88,7 +88,7 @@ class TestCommentsCreate:
     async def test_create_comment_unauthenticated(self, client):
         """Test creating comment when not authenticated."""
         response = client.post(
-            '/comments',
+            '/api/v1/comments',
             json={'text': 'New comment text'},
         )
         assert response.status_code == 401
@@ -102,13 +102,13 @@ class TestCommentsGet:
         """Test getting comment when authenticated."""
         # Login
         login_response = client.post(
-            '/auth/login',
+            '/api/v1/auth/login',
             json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
         response = client.get(
-            f'/comments/{test_comment.id}',
+            f'/api/v1/comments/{test_comment.id}',
             headers={'Authorization': f'Bearer {token}'},
         )
         
@@ -119,7 +119,7 @@ class TestCommentsGet:
     @pytest.mark.asyncio
     async def test_get_comment_unauthenticated(self, client, test_comment: Comment):
         """Test getting comment when not authenticated."""
-        response = client.get(f'/comments/{test_comment.id}')
+        response = client.get(f'/api/v1/comments/{test_comment.id}')
         assert response.status_code == 401
 
     @pytest.mark.asyncio
@@ -127,13 +127,13 @@ class TestCommentsGet:
         """Test getting non-existent comment."""
         # Login
         login_response = client.post(
-            '/auth/login',
+            '/api/v1/auth/login',
             json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
         response = client.get(
-            '/comments/00000000-0000-0000-0000-000000000099',
+            '/api/v1/comments/999999',
             headers={'Authorization': f'Bearer {token}'},
         )
         
@@ -148,13 +148,13 @@ class TestCommentsUpdate:
         """Test updating comment as owner."""
         # Login
         login_response = client.post(
-            '/auth/login',
+            '/api/v1/auth/login',
             json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
         response = client.put(
-            f'/comments/{test_comment.id}',
+            f'/api/v1/comments/{test_comment.id}',
             json={'text': 'Updated comment text'},
             headers={'Authorization': f'Bearer {token}'},
         )
@@ -169,9 +169,9 @@ class TestCommentsUpdate:
         # Create another user
         password_hash = get_password_hash('password')
         other_user = User(
-            id='00000000-0000-0000-0000-000000000020',
+            id=20,
             username='other',
-            name='Other User',
+            full_name='Other User',
             password_hash=password_hash,
             is_admin=False,
             is_active=True,
@@ -183,7 +183,7 @@ class TestCommentsUpdate:
         
         # Create comment for other user
         comment = Comment(
-            id='10000000-0000-0000-0000-000000000002',
+            id=1002,
             text='Other comment',
             source_url='https://example.com/comment/2',
             user_id=other_user.id,
@@ -196,13 +196,13 @@ class TestCommentsUpdate:
         
         # Login as test_user
         login_response = client.post(
-            '/auth/login',
+            '/api/v1/auth/login',
             json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
         response = client.put(
-            f'/comments/{comment.id}',
+            f'/api/v1/comments/{comment.id}',
             json={'text': 'Updated comment text'},
             headers={'Authorization': f'Bearer {token}'},
         )
@@ -215,13 +215,13 @@ class TestCommentsUpdate:
         """Test updating non-existent comment."""
         # Login
         login_response = client.post(
-            '/auth/login',
+            '/api/v1/auth/login',
             json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
         response = client.put(
-            '/comments/00000000-0000-0000-0000-000000000099',
+            '/api/v1/comments/999999',
             json={'text': 'Updated comment text'},
             headers={'Authorization': f'Bearer {token}'},
         )
@@ -237,21 +237,21 @@ class TestCommentsDelete:
         """Test deleting comment as owner."""
         # Login
         login_response = client.post(
-            '/auth/login',
+            '/api/v1/auth/login',
             json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
         response = client.delete(
-            f'/comments/{test_comment.id}',
+            f'/api/v1/comments/{test_comment.id}',
             headers={'Authorization': f'Bearer {token}'},
         )
         
-        assert response.status_code == 200
+        assert response.status_code == 204
         
         # Verify comment is deleted
         response = client.get(
-            f'/comments/{test_comment.id}',
+            f'/api/v1/comments/{test_comment.id}',
             headers={'Authorization': f'Bearer {token}'},
         )
         assert response.status_code == 404
@@ -262,9 +262,9 @@ class TestCommentsDelete:
         # Create another user
         password_hash = get_password_hash('password')
         other_user = User(
-            id='00000000-0000-0000-0000-000000000020',
+            id=20,
             username='other',
-            name='Other User',
+            full_name='Other User',
             password_hash=password_hash,
             is_admin=False,
             is_active=True,
@@ -276,7 +276,7 @@ class TestCommentsDelete:
         
         # Create comment for other user
         comment = Comment(
-            id='10000000-0000-0000-0000-000000000002',
+            id=1002,
             text='Other comment',
             source_url='https://example.com/comment/2',
             user_id=other_user.id,
@@ -289,13 +289,13 @@ class TestCommentsDelete:
         
         # Login as test_user
         login_response = client.post(
-            '/auth/login',
+            '/api/v1/auth/login',
             json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
         response = client.delete(
-            f'/comments/{comment.id}',
+            f'/api/v1/comments/{comment.id}',
             headers={'Authorization': f'Bearer {token}'},
         )
         
@@ -307,13 +307,13 @@ class TestCommentsDelete:
         """Test deleting non-existent comment."""
         # Login
         login_response = client.post(
-            '/auth/login',
+            '/api/v1/auth/login',
             json={'username': test_user.username, 'password': 'testpassword'},
         )
         token = login_response.json()['access_token']
         
         response = client.delete(
-            '/comments/00000000-0000-0000-0000-000000000099',
+            '/api/v1/comments/999999',
             headers={'Authorization': f'Bearer {token}'},
         )
         

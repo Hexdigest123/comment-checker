@@ -24,6 +24,7 @@ from .api import (
     clusters,
     ai,
     imports,
+    admin,
 )
 from .services.first_admin import create_first_admin_on_startup
 from .services.worker import worker
@@ -156,6 +157,7 @@ app.include_router(accounts.router, prefix="/api/v1/external-accounts", tags=["E
 app.include_router(clusters.router, prefix="/api/v1/clusters", tags=["Clusters"])
 app.include_router(ai.router, prefix="/api/v1/ai", tags=["AI Assistant"])
 app.include_router(imports.router, prefix="/api/v1/import", tags=["Import"])
+app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
 
 
 @app.get("/api/health")

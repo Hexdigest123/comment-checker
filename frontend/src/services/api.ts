@@ -93,6 +93,8 @@ export const commentApi = {
     page_size?: number;
     search?: string;
     status?: string;
+    category?: string;
+    severity?: string;
     sort_by?: string;
     sort_order?: string;
     account_id?: string;
@@ -108,9 +110,16 @@ export const commentApi = {
 
   delete: (id: string) => api.delete(`/comments/${id}`),
 
-  uploadCSV: (file: File) => {
+  upvote: (id: string) => api.post(`/comments/${id}/upvote`),
+
+  downvote: (id: string) => api.post(`/comments/${id}/downvote`),
+
+  uploadCSV: (file: File, context?: string) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (context) {
+      formData.append('context', context);
+    }
     return api.post('/comments/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
@@ -133,9 +142,10 @@ export const classificationApi = {
 
 // Cluster / graph API
 export const clusterApi = {
-  graph: () => api.get<GraphData>('/clusters/graph'),
+  graph: (params?: { include_comments?: boolean }) => api.get<GraphData>('/clusters/graph', { params }),
 
-  clusterGraph: (clusterId: string) => api.get<GraphData>(`/clusters/${clusterId}/graph`),
+  clusterGraph: (clusterId: string, params?: { include_comments?: boolean }) =>
+    api.get<GraphData>(`/clusters/${clusterId}/graph`, { params }),
 
   list: (params?: Record<string, string | number>) => api.get('/clusters', { params }),
 };
@@ -168,6 +178,23 @@ export const importApi = {
     include_replies?: boolean;
     max_comments?: number;
   }) => api.post('/import/exportcomments', data),
+};
+
+// Admin API (admin only)
+export const adminApi = {
+  deleteAllComments: () =>
+    api.delete<{ message: string; deleted_comments: number }>('/admin/comments'),
+
+  reclassifyAllComments: () =>
+    api.post<{ message: string; queued_comments: number }>('/admin/comments/reclassify'),
+
+  wipeGraph: () =>
+    api.delete<{
+      message: string;
+      deleted_clusters: number;
+      deleted_accounts: number;
+      deleted_connections: number;
+    }>('/admin/graph'),
 };
 
 export default api;

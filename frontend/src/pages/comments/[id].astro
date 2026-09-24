@@ -4,5 +4,5 @@ import CommentDetailPage from '../../components/pages/CommentDetailPage';
 ---
 
 <RootLayout title="Comment Details - Comment Checker">
-  <CommentDetailPage client:only="react" params={Astro.params} />
+  <CommentDetailPage client:only="react" params={{ id: Astro.params.id ?? '' }} />
 </RootLayout>

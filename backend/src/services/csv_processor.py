@@ -7,21 +7,22 @@ Updated to support:
 - Creating or finding external accounts
 - Auto-clustering by username/platform
 - Auto-generating embeddings for comments
+- Skipping comments that already exist (duplicate detection before AI processing)
 """
 
 import csv
 import io
 import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 import uuid
 
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..config import get_settings
-from ..db.models import CommentStatus, ExternalAccount
+from ..db.models import Comment, CommentStatus, ExternalAccount
 from ..db.models.external_account import PlatformEnum as PE
 from ..services.comment import create_comment_batch
 from ..services.clustering import ClusteringService
@@ -213,6 +214,7 @@ def extract_comment_from_row(
     column_mapping: Dict[str, str],
     user_id: str,
     batch_id: str,
+    default_context: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Extract comment data from a CSV row.
@@ -227,7 +229,9 @@ def extract_comment_from_row(
         column_mapping: Mapping of CSV columns to model fields
         user_id: User ID who uploaded the CSV
         batch_id: Batch ID for tracking
-        
+        default_context: Context supplied at upload time, used when the row
+            has no context column value
+
     Returns:
         Dictionary with comment data including external_account_info
     """
@@ -275,7 +279,11 @@ def extract_comment_from_row(
                         "niedrig": "low",
                     }
                     comment_data["priority"] = priority_map.get(value.lower(), "medium")
-    
+
+    # Fall back to the context supplied at upload time when the row has none
+    if not comment_data.get("context") and default_context:
+        comment_data["context"] = default_context
+
     # Try to extract platform and username from link if not explicitly provided
     if not extracted_platform and extracted_link:
         platform, username = extract_url_platform(extracted_link)
@@ -305,33 +313,109 @@ def extract_comment_from_row(
     return comment_data
 
 
+def normalize_comment_text(text: Optional[str]) -> str:
+    """
+    Normalize comment text for duplicate detection.
+
+    Case-insensitive and insensitive to whitespace differences.
+
+    Args:
+        text: Raw comment text
+        
+    Returns:
+        Normalized comment text
+    """
+    if not text:
+        return ""
+    return " ".join(text.split()).lower()
+
+
+def _duplicate_key(comment_data: Dict[str, Any]) -> Tuple[str, str]:
+    """
+    Build a duplicate-detection key from a comment's author and text.
+
+    Args:
+        comment_data: Comment data dictionary from extract_comment_from_row
+        
+    Returns:
+        Tuple of (author, normalized text)
+    """
+    account_info = comment_data.get("external_account_info") or {}
+    author = account_info.get("username") or comment_data.get("original_author") or ""
+    return (author.strip().lower(), normalize_comment_text(comment_data.get("text")))
+
+
+async def _existing_duplicate_keys(
+    db: AsyncSession,
+    user_id: str,
+    texts: List[str],
+) -> Set[Tuple[str, str]]:
+    """
+    Fetch duplicate keys of comments already stored for this user.
+
+    Only comments whose (lowercased) text matches one of the given texts
+    are fetched, to keep the query cheap on large comment tables.
+
+    Args:
+        db: Database session
+        user_id: User ID the existing comments belong to
+        texts: Candidate comment texts from the current import
+        
+    Returns:
+        Set of (author, normalized text) keys already in the database
+    """
+    lowered_texts = list({text.lower() for text in texts if text})
+    if not lowered_texts:
+        return set()
+    
+    result = await db.execute(
+        select(Comment.text, Comment.original_author, ExternalAccount.username)
+        .outerjoin(ExternalAccount, Comment.external_account_id == ExternalAccount.id)
+        .where(
+            Comment.user_id == user_id,
+            func.lower(Comment.text).in_(lowered_texts),
+        )
+    )
+    keys: Set[Tuple[str, str]] = set()
+    for text, original_author, username in result:
+        author = username or original_author or ""
+        keys.add((author.strip().lower(), normalize_comment_text(text)))
+    return keys
+
+
 async def process_csv_file(
     db: AsyncSession,
     file: UploadFile,
     user_id: str,
     batch_id: str = None,
+    default_context: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Process a CSV file and create comments with external accounts and clustering.
     
     This updated version:
     1. Extracts username and link from CSV
-    2. Creates or finds external accounts
-    3. Auto-clusters accounts by username/platform
-    4. Creates comments with external account associations
-    5. Optionally generates embeddings for comments
+    2. Skips duplicate comments (same author + same text) already ingested
+       for this user, before any AI processing
+    3. Creates or finds external accounts
+    4. Auto-clusters accounts by username/platform
+    5. Creates comments with external account associations
+    6. Optionally generates embeddings for comments
     
     Args:
         db: Database session
         file: Uploaded CSV file
         user_id: User ID who uploaded the file
         batch_id: Optional batch ID (generated if not provided)
+        default_context: Optional context supplied at upload time, applied to
+            comments that have no context of their own
         
     Returns:
         Dictionary with processing results:
         - total_rows: Total rows in CSV
-        - valid_rows: Valid rows processed
+        - valid_rows: Valid rows processed (duplicates excluded)
         - invalid_rows: Invalid rows skipped
+        - duplicates_skipped: Rows skipped because the comment already exists
         - comments: List of created comment IDs
         - accounts_created: Number of new external accounts created
         - clusters_created: Number of new clusters created
@@ -367,6 +451,7 @@ async def process_csv_file(
             "total_rows": 0,
             "valid_rows": 0,
             "invalid_rows": 0,
+            "duplicates_skipped": 0,
             "comments": [],
             "accounts_created": 0,
             "clusters_created": 0,
@@ -376,71 +461,98 @@ async def process_csv_file(
     logger.info(f"CSV columns mapped: {column_mapping}")
     clustering_service = ClusteringService(db)
     
-    valid_comments = []
+    extracted_comments = []
     invalid_rows = 0
-    accounts_created = 0
-    clusters_created = set()  # Track unique cluster IDs
     
     for i, row in enumerate(rows):
-        comment_data = extract_comment_from_row(row, column_mapping, user_id, batch_id)
+        comment_data = extract_comment_from_row(
+            row, column_mapping, user_id, batch_id, default_context=default_context
+        )
         
         if comment_data:
-            external_account_info = comment_data.pop("external_account_info", None)
-            
-            if external_account_info:
-                platform = external_account_info.get("platform", "other")
-                username = external_account_info.get("username")
-                
-                try:
-                    platform_enum = PE(platform.lower())
-                except ValueError:
-                    platform_enum = PE.OTHER
-                result = await db.execute(
-                    select(ExternalAccount).where(
-                        ExternalAccount.platform == platform_enum,
-                        ExternalAccount.username == username
-                    )
-                )
-                account = result.scalar_one_or_none()
-                
-                if not account:
-                    account = ExternalAccount(
-                        id=str(uuid.uuid4()),
-                        platform=platform_enum,
-                        username=username,
-                        display_name=external_account_info.get("display_name"),
-                        profile_url=external_account_info.get("profile_url"),
-                        platform_user_id=external_account_info.get("platform_user_id"),
-                        is_active=True,
-                    )
-                    db.add(account)
-                    await db.commit()
-                    await db.refresh(account)
-                    accounts_created += 1
-                    
-                    logger.info(f"Created external account: {account.id} ({platform}/{username})")
-                
-                # Auto-cluster by username/platform
-                cluster = await clustering_service.auto_cluster_by_username(
-                    platform=platform,
-                    username=username or "",
-                    user_id=user_id
-                )
-                clusters_created.add(cluster.id)
-                
-                # Assign account to cluster
-                if account.cluster_id != cluster.id:
-                    account.cluster_id = cluster.id
-                    db.add(account)
-                    await db.commit()
-                comment_data["external_account_id"] = account.id
-                
-                await clustering_service._update_cluster_metadata(cluster.id)
-            
-            valid_comments.append(comment_data)
+            extracted_comments.append(comment_data)
         else:
             invalid_rows += 1
             logger.warning(f"Skipping invalid row {i + 1}")
+    
+    # Duplicate detection: skip comments that already exist for this user
+    # (same author + same text) before any AI tooling (classification,
+    # embeddings) or account/clustering work runs on them.
+    existing_keys = await _existing_duplicate_keys(
+        db, user_id, [cd["text"] for cd in extracted_comments]
+    )
+    
+    valid_comments = []
+    duplicates_skipped = 0
+    accounts_created = 0
+    clusters_created = set()  # Track unique cluster IDs
+    seen_keys: Set[Tuple[str, str]] = set()
+    
+    for comment_data in extracted_comments:
+        key = _duplicate_key(comment_data)
+        if key in existing_keys or key in seen_keys:
+            duplicates_skipped += 1
+            logger.info(f"Skipping duplicate comment: {comment_data['text'][:50]}")
+            continue
+        seen_keys.add(key)
+        
+        external_account_info = comment_data.pop("external_account_info", None)
+        
+        if external_account_info:
+            platform = external_account_info.get("platform", "other")
+            username = external_account_info.get("username")
+            
+            try:
+                platform_enum = PE(platform.lower())
+            except ValueError:
+                platform_enum = PE.OTHER
+            result = await db.execute(
+                select(ExternalAccount).where(
+                    ExternalAccount.platform == platform_enum,
+                    ExternalAccount.username == username
+                )
+            )
+            account = result.scalar_one_or_none()
+            
+            if not account:
+                account = ExternalAccount(
+                    id=str(uuid.uuid4()),
+                    platform=platform_enum,
+                    username=username,
+                    display_name=external_account_info.get("display_name"),
+                    profile_url=external_account_info.get("profile_url"),
+                    platform_user_id=external_account_info.get("platform_user_id"),
+                    is_active=True,
+                )
+                db.add(account)
+                await db.commit()
+                await db.refresh(account)
+                accounts_created += 1
+                
+                logger.info(f"Created external account: {account.id} ({platform}/{username})")
+            
+            # Auto-cluster by username/platform
+            cluster = await clustering_service.auto_cluster_by_username(
+                platform=platform,
+                username=username or "",
+                user_id=user_id
+            )
+            clusters_created.add(cluster.id)
+            
+            # Assign account to cluster
+            if account.cluster_id != cluster.id:
+                account.cluster_id = cluster.id
+                db.add(account)
+                await db.commit()
+            comment_data["external_account_id"] = account.id
+            
+            await clustering_service._update_cluster_metadata(cluster.id)
+        
+        valid_comments.append(comment_data)
+    
+    if duplicates_skipped:
+        logger.info(f"Skipped {duplicates_skipped} duplicate comment(s) already ingested")
+    
     if valid_comments:
         comments = await create_comment_batch(db, valid_comments)
         comment_ids = [c.id for c in comments]
@@ -460,6 +572,7 @@ async def process_csv_file(
         "total_rows": len(rows),
         "valid_rows": len(valid_comments),
         "invalid_rows": invalid_rows,
+        "duplicates_skipped": duplicates_skipped,
         "comments": comment_ids,
         "accounts_created": accounts_created,
         "clusters_created": len(clusters_created),

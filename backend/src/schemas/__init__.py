@@ -20,8 +20,10 @@ from .comment import (
     CommentUpdate,
     CommentResponse,
     CommentListResponse,
+    CommentMentionResponse,
     CommentStatusResponse,
     CommentSearchResponse,
+    CommentVoteResponse,
 )
 from .classification import (
     ClassificationCreate,
@@ -81,8 +83,10 @@ __all__ = [
     "CommentUpdate",
     "CommentResponse",
     "CommentListResponse",
+    "CommentMentionResponse",
     "CommentStatusResponse",
     "CommentSearchResponse",
+    "CommentVoteResponse",
     # Classification schemas
     "ClassificationCreate",
     "ClassificationResponse",

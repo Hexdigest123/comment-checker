@@ -137,6 +137,11 @@ async def get_category_distribution(
                 ClassificationCategory.SEXUAL: "Sexual",
                 ClassificationCategory.SPAM: "Spam",
                 ClassificationCategory.ILLEGAL: "Illegal",
+                ClassificationCategory.FINANCIAL: "Financial",
+                ClassificationCategory.HEALTH: "Health",
+                ClassificationCategory.LEGAL: "Legal",
+                ClassificationCategory.PII: "PII",
+                ClassificationCategory.JAILBREAKING: "Jailbreaking",
                 ClassificationCategory.SAFE: "Safe",
             }
             label = category_labels.get(category, category.value)

@@ -57,7 +57,6 @@ export default {
           // Joy accents (tags + highlights only)
           yellow: '#fec835',
           'yellow-tint': 'rgb(var(--color-mistral-yellow-tint) / <alpha-value>)',
-          'yellow-highlight': 'rgb(var(--color-mistral-yellow-highlight) / <alpha-value>)',
           orange: '#ff6523',
           'orange-tint': 'rgb(var(--color-mistral-orange-tint) / <alpha-value>)',
           pink: '#ff95de',

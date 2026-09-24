@@ -11,12 +11,33 @@ from sqlalchemy import or_, select, update, delete, desc, asc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
-from ..db.models import Comment
+from ..db.models import Comment, CommentMention
 from ..db.models.comment import CommentStatus as CS, CommentPriority as CP
-from ..schemas import CommentUpdate, PageResponse, CommentListResponse
+from ..schemas import CommentUpdate, PageResponse, CommentListResponse, CommentMentionResponse
 from .classification import classification_to_response
+from .mentions import sync_comment_mentions
 
 logger = logging.getLogger(__name__)
+
+
+def _platform_value(platform: Any) -> Optional[str]:
+    """Return the string value of a platform enum member or None."""
+    if platform is None:
+        return None
+    return str(platform.value) if hasattr(platform, "value") else str(platform)
+
+
+async def _sync_mentions_safe(db: AsyncSession, comment: Comment) -> None:
+    """
+    Sync mention links for a comment without failing comment operations.
+
+    Mention resolution is auxiliary: if it fails, the comment itself is
+    still created/updated and the error is logged.
+    """
+    try:
+        await sync_comment_mentions(db, comment)
+    except Exception as exc:
+        logger.warning(f"Failed to link mentions for comment {comment.id}: {exc}")
 
 
 async def get_comment_by_id(
@@ -30,7 +51,8 @@ async def get_comment_by_id(
         .options(
             joinedload(Comment.classifications),
             joinedload(Comment.user),
-            joinedload(Comment.external_account)
+            joinedload(Comment.external_account),
+            selectinload(Comment.mentions).joinedload(CommentMention.external_account),
         )
     )
     return result.unique().scalar_one_or_none()
@@ -107,7 +129,10 @@ async def create_comment(
     db.add(comment)
     await db.commit()
     await db.refresh(comment)
-    
+
+    await _sync_mentions_safe(db, comment)
+    await db.commit()
+
     logger.info(f"Comment created: {comment.id}")
     
     return comment
@@ -171,7 +196,11 @@ async def create_comment_batch(
     
     db.add_all(comments)
     await db.commit()
-    
+
+    for comment in comments:
+        await _sync_mentions_safe(db, comment)
+    await db.commit()
+
     for comment in comments:
         await db.refresh(comment)
     
@@ -225,7 +254,8 @@ async def update_comment(
         comment.extra_metadata = comment_update.metadata
     
     comment.updated_at = datetime.utcnow()
-    
+
+    await _sync_mentions_safe(db, comment)
     await db.commit()
     await db.refresh(comment)
     
@@ -324,6 +354,7 @@ async def get_comments_paginated(
         joinedload(DBComment.external_account),
         joinedload(DBComment.user),
         selectinload(DBComment.classifications),
+        selectinload(DBComment.mentions).joinedload(CommentMention.external_account),
     )
     
     if filter_condition is not None:
@@ -361,12 +392,25 @@ async def get_comments_paginated(
                 source_platform=c.source_platform,
                 status=c.status.value,
                 priority=c.priority.value,
+                vote_score=c.vote_score,
                 processed_at=c.processed_at,
                 created_at=c.created_at,
                 classifications=[
                     classification_to_response(cl).model_dump(mode="json")
                     for cl in c.classifications
                 ] if c.classifications else None,
+                mentions=[
+                    CommentMentionResponse(
+                        account_id=m.external_account.id,
+                        username=m.external_account.username,
+                        display_name=m.external_account.display_name,
+                        platform=_platform_value(m.external_account.platform),
+                        profile_url=m.external_account.profile_url,
+                        cluster_id=m.external_account.cluster_id,
+                        mentioned_username=m.mentioned_username,
+                    )
+                    for m in c.mentions
+                ] if c.mentions else None,
             )
             for c in comments
         ],

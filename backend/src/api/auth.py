@@ -251,7 +251,11 @@ async def refresh_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    if db_refresh_token.expires_at < datetime.now(timezone.utc):
+    # Normalise to UTC: SQLite (used in tests) returns naive datetimes
+    token_expires_at = db_refresh_token.expires_at
+    if token_expires_at.tzinfo is None:
+        token_expires_at = token_expires_at.replace(tzinfo=timezone.utc)
+    if token_expires_at < datetime.now(timezone.utc):
         # Token expired - revoke it
         await revoke_refresh_token(db, db_refresh_token.id)
         raise HTTPException(

@@ -517,8 +517,7 @@ const AssistantContent = () => {
                 <h2 className="font-display text-3xl sm:text-4xl font-semibold leading-tight">
                   What do you want to know
                   <br />
-                  about your{' '}
-                  <span className="bg-mistral-yellow-highlight dark:bg-mistral-yellow-highlight/40 px-1">comments</span>?
+                  about your comments?
                 </h2>
                 <p className="mt-4 text-mistral-muted">
                   It searches, classifies and summarizes your data with tools before answering.

@@ -66,6 +66,11 @@ const categoryColors: Record<string, string> = {
   sexual: '#ffc2eb',
   spam: '#6d6d78',
   illegal: '#0087e9',
+  financial: '#f7b900',
+  health: '#00c8b4',
+  legal: '#0057d2',
+  pii: '#ff9f1c',
+  jailbreaking: '#8f4bd8',
 };
 
 // Date range options

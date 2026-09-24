@@ -522,18 +522,25 @@ class ClusteringService:
         
         return accounts, total
     
-    async def get_cluster_graph(self, cluster_id: Optional[str] = None) -> dict:
+    async def get_cluster_graph(
+        self, cluster_id: Optional[str] = None, include_comments: bool = True
+    ) -> dict:
         """
         Get cluster graph data for visualization.
-        
+
         Returns a dict with nodes and links for D3.js or similar.
         """
-        clusters_result = await self.db.execute(
-            select(AccountCluster).options(
-                selectinload(AccountCluster.accounts).selectinload(
-                    ExternalAccount.comments
-                )
+        graph_options = [
+            selectinload(AccountCluster.accounts).selectinload(ExternalAccount.comments)
+        ]
+        if include_comments:
+            graph_options.append(
+                selectinload(AccountCluster.accounts)
+                .selectinload(ExternalAccount.comments)
+                .selectinload(Comment.classifications)
             )
+        clusters_result = await self.db.execute(
+            select(AccountCluster).options(*graph_options)
         )
         clusters = clusters_result.scalars().all()
         
@@ -544,7 +551,15 @@ class ClusteringService:
         
         nodes = []
         cluster_map = {}
-        
+        comment_links = []
+        platform_map = {}
+        platform_links = []
+
+        def _ev(v):
+            return v.value if hasattr(v, "value") else v
+
+        # Only include clusters reachable from the requested cluster
+        included_clusters = []
         for cluster in clusters:
             if cluster_id and cluster.id != cluster_id:
                 # Only include connected clusters if cluster_id is specified
@@ -554,7 +569,30 @@ class ClusteringService:
                 )
                 if not connected:
                     continue
-            
+            included_clusters.append(cluster)
+
+        # Platform nodes come first so the hierarchy reads
+        # platform -> cluster -> account -> comment
+        platform_comment_count: dict = {}
+        for cluster in included_clusters:
+            for account in cluster.accounts:
+                platform = _ev(account.platform)
+                platform_comment_count[platform] = (
+                    platform_comment_count.get(platform, 0) + len(account.comments)
+                )
+        for platform in sorted(platform_comment_count):
+            platform_map[platform] = len(nodes)
+            nodes.append({
+                "id": f"platform:{platform}",
+                "name": platform,
+                "type": "platform",
+                "platform": platform,
+                "comment_count": platform_comment_count[platform],
+                "color": "",
+                "index": len(nodes)
+            })
+
+        for cluster in included_clusters:
             cluster_map[cluster.id] = len(nodes)
             nodes.append({
                 "id": cluster.id,
@@ -568,6 +606,7 @@ class ClusteringService:
                 "index": len(nodes)
             })
             for account in cluster.accounts:
+                account_index = len(nodes)
                 nodes.append({
                     "id": account.id,
                     "name": account.username or account.display_name or "Unknown",
@@ -578,7 +617,51 @@ class ClusteringService:
                     "color": cluster.color,
                     "index": len(nodes)
                 })
+                if not include_comments:
+                    continue
+                for comment in account.comments:
+                    latest_classification = max(
+                        comment.classifications,
+                        key=lambda c: c.created_at,
+                        default=None,
+                    )
+                    text = " ".join(comment.text.split())
+                    if len(text) > 80:
+                        text = text[:79] + "…"
+                    nodes.append({
+                        "id": str(comment.id),
+                        "name": text,
+                        "type": "comment",
+                        "platform": _ev(account.platform),
+                        "status": _ev(comment.status),
+                        "category": _ev(latest_classification.category) if latest_classification and latest_classification.category else None,
+                        "severity": _ev(latest_classification.severity) if latest_classification and latest_classification.severity else None,
+                        "account_id": account.id,
+                        "comment_count": 0,
+                        "color": cluster.color,
+                        "index": len(nodes)
+                    })
+                    comment_links.append({
+                        "source": account_index,
+                        "target": len(nodes) - 1,
+                        "type": "comment"
+                    })
         links = []
+        # Links from platforms to the clusters that have accounts there
+        for cluster in included_clusters:
+            seen_platforms = set()
+            for account in cluster.accounts:
+                platform = _ev(account.platform)
+                if platform in seen_platforms:
+                    continue
+                seen_platforms.add(platform)
+                platform_links.append({
+                    "source": platform_map[platform],
+                    "target": cluster_map[cluster.id],
+                    "type": "platform"
+                })
+        links.extend(platform_links)
+        links.extend(comment_links)
 
         for connection in connections:
             if cluster_id:
@@ -596,10 +679,7 @@ class ClusteringService:
             })
         
         # Links from accounts to their clusters
-        for cluster in clusters:
-            if cluster_id and cluster.id != cluster_id:
-                continue
-            
+        for cluster in included_clusters:
             for account in cluster.accounts:
                 account_index = None
                 for i, node in enumerate(nodes):

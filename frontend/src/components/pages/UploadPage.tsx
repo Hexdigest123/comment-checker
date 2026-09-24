@@ -13,6 +13,7 @@ const UploadPageContent = () => {
 
   // CSV upload state
   const [file, setFile] = useState<File | null>(null);
+  const [csvContext, setCsvContext] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -58,7 +59,7 @@ const UploadPageContent = () => {
     setSuccess('');
 
     try {
-      const response = await commentApi.uploadCSV(file);
+      const response = await commentApi.uploadCSV(file, csvContext || undefined);
       const data = response.data as CSVUploadResponse;
       setResults(data);
       setSuccess(
@@ -127,7 +128,7 @@ const UploadPageContent = () => {
         <div className="mb-8">
           <span className="eyebrow-badge">Ingestion</span>
           <h1 className="mt-3 font-display text-4xl font-semibold text-mistral-ink leading-tight">
-            Ingest <span className="marker-highlight">Comments</span>
+            Ingest Comments
           </h1>
           <p className="mt-2 text-sm text-mistral-muted">
             Upload a CSV or pull comments straight from a social media post.
@@ -161,6 +162,21 @@ const UploadPageContent = () => {
                 <Input type="file" accept=".csv" onChange={handleFileChange} ref={fileInputRef} required />
                 <p className="mt-1 text-sm text-mistral-muted">
                   CSV file with comment text, optionally author, URL and platform columns
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-mono text-xs uppercase tracking-widest text-mistral-muted mb-2">
+                  Context (recommended for classification)
+                </label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Comments reacting to a news video about..."
+                  value={csvContext}
+                  onChange={(e) => setCsvContext(e.target.value)}
+                />
+                <p className="mt-1 text-sm text-mistral-muted">
+                  Applied to all uploaded comments. A per-row <strong className="text-mistral-ink">context</strong> column takes precedence.
                 </p>
               </div>
 

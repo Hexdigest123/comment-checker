@@ -1,0 +1,8 @@
+---
+import RootLayout from '../layouts/RootLayout.astro';
+import AdminSettingsPage from '../components/pages/AdminSettingsPage';
+---
+
+<RootLayout title="Admin Settings - Comment Checker">
+  <AdminSettingsPage client:only="react" />
+</RootLayout>

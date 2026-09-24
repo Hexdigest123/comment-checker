@@ -27,6 +27,16 @@ export interface LoginResponse {
 
 export type CommentStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'waiting';
 
+export interface CommentMention {
+  account_id: string;
+  username: string | null;
+  display_name: string | null;
+  platform: string | null;
+  profile_url: string | null;
+  cluster_id: string | null;
+  mentioned_username: string | null;
+}
+
 export interface Comment {
   id: string;
   text: string;
@@ -38,11 +48,13 @@ export interface Comment {
   user_id: string;
   status: CommentStatus;
   priority: string;
+  vote_score: number;
   error_message: string | null;
   created_at: string;
   updated_at: string;
   processed_at?: string | null;
   classifications?: Classification[];
+  mentions?: CommentMention[] | null;
 }
 
 export type ClassificationBackend = 'typesafe' | 'mistral' | 'combined';
@@ -54,6 +66,11 @@ export type ClassificationCategory =
   | 'sexual'
   | 'spam'
   | 'illegal'
+  | 'financial'
+  | 'health'
+  | 'legal'
+  | 'pii'
+  | 'jailbreaking'
   | 'safe';
 export type ClassificationSeverity = 'low' | 'medium' | 'high' | 'critical';
 
@@ -90,9 +107,14 @@ export interface CSVUploadResponse {
 export interface GraphNode {
   id: string;
   name: string;
-  type: 'cluster' | 'account';
+  type: 'platform' | 'cluster' | 'account' | 'comment';
   platform?: string;
   cluster_type?: string;
+  status?: string;
+  category?: string | null;
+  severity?: string | null;
+  account_id?: string;
+  cluster_id?: string;
   comment_count?: number;
   toxicity_score?: number;
   color?: string | null;
@@ -102,7 +124,7 @@ export interface GraphNode {
 export interface GraphLink {
   source: number;
   target: number;
-  type: 'connection' | 'belongs_to';
+  type: 'platform' | 'connection' | 'belongs_to' | 'comment';
   connection_type?: string;
   confidence?: number;
   status?: string;

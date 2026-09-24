@@ -7,9 +7,11 @@ interface Props {
   title?: string;
   /** Chat-like pages: full-height column, no container width, padding, or footer. */
   fullBleed?: boolean;
+  /** Dense table pages: larger container so wide tables get more room. */
+  wide?: boolean;
 }
 
-const { title = 'Comment Checker', fullBleed = false } = Astro.props;
+const { title = 'Comment Checker', fullBleed = false, wide = false } = Astro.props;
 ---
 
 <!DOCTYPE html>
@@ -35,7 +37,8 @@ const { title = 'Comment Checker', fullBleed = false } = Astro.props;
   <title>{title}</title>
 </head>
 <body class="font-sans antialiased bg-mistral-surface text-mistral-ink transition-colors duration-300">
-  <div class="min-h-screen flex flex-col">
+  <!-- fullBleed pages need an exact viewport height so flex-1 children can fill it -->
+  <div class={`${fullBleed ? 'h-screen' : 'min-h-screen'} flex flex-col`}>
     <!-- Navigation (client component: shows user state + logout) -->
     <NavBar client:only="react" />
 
@@ -45,7 +48,7 @@ const { title = 'Comment Checker', fullBleed = false } = Astro.props;
         <slot />
       </main>
     ) : (
-      <main class="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+      <main class={`flex-1 mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full ${wide ? 'max-w-[1760px]' : 'max-w-7xl'}`}>
         <slot />
       </main>
     )}

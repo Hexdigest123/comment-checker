@@ -24,8 +24,6 @@
 
   /* Joy accent tints */
   --color-mistral-yellow-tint: 255 244 210;    /* #fff4d2 */
-  --color-mistral-yellow-highlight: 255 232 162; /* #ffe8a2 marker highlight */
-  --marker-highlight-alpha: 1;
   --color-mistral-orange-tint: 255 240 235;    /* #fff0eb */
   --color-mistral-pink-tint: 255 225 244;      /* #ffe1f4 */
   --color-mistral-green-tint: 231 246 238;     /* #e7f6ee */
@@ -51,8 +49,6 @@
 
   /* Joy accent tints become dark washes of the same hue */
   --color-mistral-yellow-tint: 51 41 14;
-  --color-mistral-yellow-highlight: 254 200 53; /* #fec835, translucent in dark mode */
-  --marker-highlight-alpha: 0.45;
   --color-mistral-orange-tint: 51 25 13;
   --color-mistral-pink-tint: 51 18 38;
   --color-mistral-green-tint: 15 42 30;
@@ -74,19 +70,6 @@ html {
 /* Eyebrow inside a small badge */
 .eyebrow-badge {
   @apply inline-block font-mono text-xs uppercase tracking-widest text-mistral-muted bg-mistral-band border border-mistral-border rounded-sm px-2 py-1;
-}
-
-/* Yellow marker highlight for one or two key words per page */
-.marker-highlight {
-  background-image: linear-gradient(
-    to top,
-    transparent 42%,
-    rgb(var(--color-mistral-yellow-highlight) / var(--marker-highlight-alpha)) 42%,
-    rgb(var(--color-mistral-yellow-highlight) / var(--marker-highlight-alpha)) 92%,
-    transparent 92%
-  );
-  padding: 0 0.15em;
-  border-radius: 2px;
 }
 
 /* Arrow-CTA: the arrow slides right on hover (pure CSS) */

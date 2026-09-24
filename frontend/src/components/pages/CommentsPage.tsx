@@ -1,4 +1,6 @@
-import { DataTable, StatusBadge, PlatformBadge } from '../tables/DataTable';
+import { useEffect } from 'react';
+import { ChevronUp, ChevronDown, ChevronRight, ArrowRight } from 'lucide-react';
+import { DataTable, StatusBadge, PlatformBadge, CategoryBadge, SeverityBadge } from '../tables/DataTable';
 import { AuthProvider, useAuth } from '../../services/auth';
 import { commentApi } from '../../services/api';
 import { usePaginatedResource } from '../../hooks/usePaginatedResource';
@@ -8,6 +10,13 @@ import type { Comment, PageResponse } from '../../types';
 const fetchComments = (params: Record<string, string | number>) =>
   commentApi.list(params).then((r) => r.data as PageResponse<Comment>);
 
+const latestClassification = (item: Comment) =>
+  item.classifications && item.classifications.length > 0
+    ? [...item.classifications].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )[0]
+    : null;
+
 const CommentsPageContent = () => {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
@@ -15,6 +24,26 @@ const CommentsPageContent = () => {
     enabled: isAuthenticated,
     pollIntervalMs: 5000,
   });
+
+  // Mention links point here with ?account_id=<id>
+  const accountIdFilter = new URLSearchParams(window.location.search).get('account_id');
+  useEffect(() => {
+    if (accountIdFilter) {
+      commentsResource.setFilter('account_id', accountIdFilter);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountIdFilter]);
+
+  // Voting is best-effort: apply the vote, then refetch to show the new score.
+  // A score below 0 classifies the comment as a false flag (row is greyed out).
+  const handleVote = async (id: string, action: 'upvote' | 'downvote') => {
+    try {
+      await commentApi[action](id);
+    } catch {
+      // score may still have changed server-side; refetch either way
+    }
+    commentsResource.refetch();
+  };
 
   const commentColumns = [
     {
@@ -60,6 +89,32 @@ const CommentsPageContent = () => {
       render: (item: Comment) => <StatusBadge status={item.status} />,
     },
     {
+      key: 'category',
+      header: 'Category',
+      sortable: false,
+      render: (item: Comment) => {
+        const latest = latestClassification(item);
+        return latest ? (
+          <CategoryBadge category={latest.category} />
+        ) : (
+          <span className="text-mistral-muted/60">-</span>
+        );
+      },
+    },
+    {
+      key: 'severity',
+      header: 'Severity',
+      sortable: false,
+      render: (item: Comment) => {
+        const latest = latestClassification(item);
+        return latest && latest.severity ? (
+          <SeverityBadge severity={latest.severity} />
+        ) : (
+          <span className="text-mistral-muted/60">-</span>
+        );
+      },
+    },
+    {
       key: 'created_at',
       header: 'Created',
       sortable: true,
@@ -71,14 +126,48 @@ const CommentsPageContent = () => {
       key: 'actions',
       header: 'Actions',
       render: (item: Comment) => (
-        <a
-          href={`/comments/${item.id}`}
-          className="group inline-flex items-center gap-1 text-sm text-mistral-ink hover:text-mistral-red-deep transition-colors duration-200"
-          onClick={(e) => e.stopPropagation()}
-        >
-          View
-          <span className="transition-all duration-300 group-hover:translate-x-0.5">→</span>
-        </a>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              title="Upvote"
+              className="px-1.5 py-0.5 font-mono text-xs border border-mistral-border-strong rounded-md text-mistral-ink hover:border-mistral-ink transition-colors duration-200"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleVote(item.id, 'upvote');
+              }}
+            >
+              <ChevronUp size={14} aria-hidden />
+            </button>
+            <span
+              className={`font-mono text-xs min-w-6 text-center ${
+                item.vote_score < 0 ? 'text-mistral-red-deep' : 'text-mistral-muted'
+              }`}
+              title={item.vote_score < 0 ? 'False flag: downvotes outnumber upvotes' : 'Vote score'}
+            >
+              {item.vote_score}
+            </span>
+            <button
+              type="button"
+              title="Downvote"
+              className="px-1.5 py-0.5 font-mono text-xs border border-mistral-border-strong rounded-md text-mistral-ink hover:border-mistral-ink transition-colors duration-200"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleVote(item.id, 'downvote');
+              }}
+            >
+              <ChevronDown size={14} aria-hidden />
+            </button>
+          </div>
+          <a
+            href={`/comments/${item.id}`}
+            className="group inline-flex items-center gap-1 text-sm text-mistral-ink hover:text-mistral-red-deep transition-colors duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            View
+            <ChevronRight size={14} className="transition-all duration-300 group-hover:translate-x-0.5" aria-hidden />
+          </a>
+        </div>
       ),
     },
   ];
@@ -109,7 +198,7 @@ const CommentsPageContent = () => {
           <span className="eyebrow-badge">Moderation queue</span>
           <h1 className="mt-3 font-display text-4xl font-semibold text-mistral-ink leading-tight">Comments</h1>
           <p className="mt-2 text-sm text-mistral-muted max-w-xl">
-            Uploaded comments are <span className="marker-highlight">classified automatically</span> by the
+            Uploaded comments are classified automatically by the
             background worker, with every verdict kept for review.
           </p>
         </div>
@@ -118,13 +207,27 @@ const CommentsPageContent = () => {
           className="group inline-flex items-center gap-2 font-display text-sm text-mistral-ink hover:text-mistral-red-deep transition-colors duration-300 mt-2"
         >
           Upload / Import
-          <span className="arrow inline-block transition-all duration-300 group-hover:translate-x-1 group-hover:delay-75">→</span>
+          <span className="arrow inline-block transition-all duration-300 group-hover:translate-x-1 group-hover:delay-75">
+            <ArrowRight size={14} aria-hidden />
+          </span>
         </a>
       </div>
 
       {commentsResource.error && (
         <div className="border border-mistral-red/60 bg-mistral-red-tint text-mistral-ink p-4 rounded-md mb-6">
           {commentsResource.error}
+        </div>
+      )}
+
+      {commentsResource.filters.account_id && (
+        <div className="mb-6 flex items-center gap-3 border border-mistral-border-strong bg-mistral-band text-mistral-ink px-4 py-2 rounded-md font-mono text-sm">
+          <span>
+            Showing comments from referenced account
+            <span className="text-mistral-muted"> {commentsResource.filters.account_id}</span>
+          </span>
+          <a href="/comments" className="ml-auto text-mistral-blue hover:text-mistral-red-deep transition-colors duration-200">
+            Clear
+          </a>
         </div>
       )}
 
@@ -145,8 +248,38 @@ const CommentsPageContent = () => {
               { value: 'failed', label: 'Failed' },
             ],
           },
+          {
+            key: 'category',
+            label: 'Categories',
+            options: [
+              { value: 'hate', label: 'Hate' },
+              { value: 'harassment', label: 'Harassment' },
+              { value: 'violence', label: 'Violence' },
+              { value: 'self_harm', label: 'Self harm' },
+              { value: 'sexual', label: 'Sexual' },
+              { value: 'spam', label: 'Spam' },
+              { value: 'illegal', label: 'Illegal' },
+              { value: 'financial', label: 'Financial' },
+              { value: 'health', label: 'Health' },
+              { value: 'legal', label: 'Legal' },
+              { value: 'pii', label: 'PII' },
+              { value: 'jailbreaking', label: 'Jailbreaking' },
+              { value: 'safe', label: 'Safe' },
+            ],
+          },
+          {
+            key: 'severity',
+            label: 'Severities',
+            options: [
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high', label: 'High' },
+              { value: 'critical', label: 'Critical' },
+            ],
+          },
         ]}
         emptyMessage="No comments found. Upload a CSV to get started."
+        rowClassName={(item) => (item.vote_score < 0 ? 'opacity-50' : '')}
         onRowClick={(item) => {
           window.location.href = `/comments/${item.id}`;
         }}

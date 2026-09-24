@@ -2,11 +2,13 @@
 Database session management
 """
 
+from pathlib import Path
 from typing import AsyncGenerator
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from .base import Base
 from ..config import get_database_settings
 
 settings = get_database_settings()
@@ -53,11 +55,16 @@ async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db() -> None:
     """
-    Initialize database tables.
-    Called on application startup.
+    Apply pending database migrations.
+    Called on application startup; migrations are the sole source of
+    truth for the schema (no create_all).
     """
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    migrations_dir = Path(__file__).resolve().parents[1] / "migrations"
+    # A Config without a config file makes env.py skip its fileConfig()
+    # call, which would otherwise override the application logging setup.
+    alembic_config = Config()
+    alembic_config.set_main_option("script_location", str(migrations_dir))
+    command.upgrade(alembic_config, "head")
 
 
 async def close_db() -> None:

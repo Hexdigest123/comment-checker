@@ -95,6 +95,15 @@ const NavContent = () => {
               </button>
               {menuOpen && (
                 <div className="absolute right-0 top-12 w-48 bg-white rounded-md border border-mistral-border py-1">
+                  {user.is_admin && (
+                    <a
+                      href="/admin"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 font-display text-sm text-mistral-ink hover:bg-mistral-band transition-colors duration-200"
+                    >
+                      Admin Settings
+                    </a>
+                  )}
                   <button
                     onClick={async () => {
                       await logout();

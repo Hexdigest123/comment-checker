@@ -29,6 +29,11 @@ class ClassificationCategory(str, Enum):
     SEXUAL = "sexual"
     SPAM = "spam"
     ILLEGAL = "illegal"
+    FINANCIAL = "financial"
+    HEALTH = "health"
+    LEGAL = "legal"
+    PII = "pii"
+    JAILBREAKING = "jailbreaking"
     SAFE = "safe"
 
 

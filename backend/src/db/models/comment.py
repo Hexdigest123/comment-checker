@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKey, JSON, String, Text
+from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from .classification import Classification
     from .external_account import ExternalAccount
     from .comment_embedding import CommentEmbedding
+    from .comment_mention import CommentMention
 
 
 class CommentStatus(str, Enum):
@@ -113,6 +114,9 @@ class Comment(Base):
     processing_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Community verdict: upvotes minus downvotes (0 = neutral, < 0 = false flag)
+    vote_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
     # Additional metadata from CSV (attribute renamed: 'metadata' is reserved by SQLAlchemy)
     extra_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column("metadata", JSON, nullable=True)
 
@@ -124,6 +128,11 @@ class Comment(Base):
     )
     embeddings: Mapped[list["CommentEmbedding"]] = relationship(
         "CommentEmbedding",
+        back_populates="comment",
+        cascade="all, delete-orphan",
+    )
+    mentions: Mapped[list["CommentMention"]] = relationship(
+        "CommentMention",
         back_populates="comment",
         cascade="all, delete-orphan",
     )
@@ -159,6 +168,11 @@ class Comment(Base):
     def is_classified(self) -> bool:
         """Check if this comment has been classified."""
         return len(self.classifications) > 0
+
+    @property
+    def is_false_flag(self) -> bool:
+        """A comment is classified as a false flag when downvotes outnumber upvotes."""
+        return self.vote_score < 0
 
     @property
     def toxicity_score(self) -> float:

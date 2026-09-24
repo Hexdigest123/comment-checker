@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { StatusBadge, BackendBadge, CategoryBadge, SeverityBadge } from '../tables/DataTable';
+import { MentionText } from '../ui/MentionText';
 import { AuthProvider, useAuth } from '../../services/auth';
 import { commentApi, classificationApi } from '../../services/api';
 import type { Comment, Classification } from '../../types';
@@ -131,7 +133,7 @@ const CommentDetailPageContent = ({ params }: CommentDetailPageProps) => {
             href="/comments"
             className="group inline-flex items-center gap-2 font-display text-sm text-mistral-ink hover:text-mistral-red-deep transition-colors duration-300 mt-2"
           >
-            <span className="inline-block transition-all duration-300 group-hover:-translate-x-1">←</span>
+            <ArrowLeft size={14} className="transition-all duration-300 group-hover:-translate-x-1" aria-hidden />
             Back to Comments
           </a>
         </div>
@@ -148,7 +150,48 @@ const CommentDetailPageContent = ({ params }: CommentDetailPageProps) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block font-mono text-[11px] uppercase tracking-widest text-mistral-muted mb-1">Text</label>
-              <p className="text-mistral-ink">{comment.text}</p>
+              <p className="text-mistral-ink">
+                <MentionText text={comment.text} mentions={comment.mentions} />
+              </p>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block font-mono text-[11px] uppercase tracking-widest text-mistral-muted mb-1">Referenced accounts</label>
+              {comment.mentions && comment.mentions.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {comment.mentions.map((mention) => (
+                    <a
+                      key={mention.account_id}
+                      href={`/comments?account_id=${mention.account_id}`}
+                      className="inline-flex items-center gap-1 border border-mistral-border rounded px-2 py-1 text-sm text-mistral-blue hover:text-mistral-red-deep hover:border-mistral-red/40 transition-colors duration-200"
+                    >
+                      @{mention.username || mention.account_id}
+                      {mention.platform && (
+                        <span className="font-mono text-[10px] uppercase text-mistral-muted">{mention.platform}</span>
+                      )}
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-mistral-muted">None</p>
+              )}
+            </div>
+            <div>
+              <label className="block font-mono text-[11px] uppercase tracking-widest text-mistral-muted mb-1">Author</label>
+              {comment.original_author ? (
+                comment.original_author_url ? (
+                  <a href={comment.original_author_url} target="_blank" rel="noopener noreferrer" className="text-mistral-blue hover:text-mistral-red-deep transition-colors duration-200">
+                    {comment.original_author}
+                  </a>
+                ) : (
+                  <p className="text-mistral-ink">{comment.original_author}</p>
+                )
+              ) : (
+                <p className="text-mistral-muted">Unknown</p>
+              )}
+            </div>
+            <div>
+              <label className="block font-mono text-[11px] uppercase tracking-widest text-mistral-muted mb-1">Source Platform</label>
+              <p className="text-mistral-ink">{comment.source_platform || '—'}</p>
             </div>
             <div>
               <label className="block font-mono text-[11px] uppercase tracking-widest text-mistral-muted mb-1">Status</label>
@@ -168,6 +211,16 @@ const CommentDetailPageContent = ({ params }: CommentDetailPageProps) => {
               <label className="block font-mono text-[11px] uppercase tracking-widest text-mistral-muted mb-1">Created At</label>
               <p className="text-mistral-ink">{new Date(comment.created_at).toLocaleString()}</p>
             </div>
+            <div>
+              <label className="block font-mono text-[11px] uppercase tracking-widest text-mistral-muted mb-1">Updated At</label>
+              <p className="text-mistral-ink">{new Date(comment.updated_at).toLocaleString()}</p>
+            </div>
+            {comment.context && (
+              <div className="md:col-span-2">
+                <label className="block font-mono text-[11px] uppercase tracking-widest text-mistral-muted mb-1">Context</label>
+                <p className="text-mistral-ink">{comment.context}</p>
+              </div>
+            )}
           </div>
 
           <div className="mt-6 flex gap-4">

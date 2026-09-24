@@ -117,9 +117,13 @@ class ClusterGraphNode(BaseModel):
     """Node in cluster graph."""
     id: str
     name: str
-    type: str  # 'cluster' or 'account'
+    type: str  # 'platform', 'cluster', 'account' or 'comment'
     cluster_type: Optional[str] = None
     platform: Optional[str] = None
+    status: Optional[str] = None
+    category: Optional[str] = None
+    severity: Optional[str] = None
+    account_id: Optional[str] = None
     comment_count: int = 0
     toxicity_score: float = 0.0
     color: str
@@ -131,7 +135,7 @@ class ClusterGraphLink(BaseModel):
     """Link in cluster graph."""
     source: int
     target: int
-    type: str  # 'connection' or 'belongs_to'
+    type: str  # 'platform', 'connection', 'belongs_to' or 'comment'
     connection_type: Optional[str] = None
     confidence: Optional[float] = None
     status: Optional[str] = None

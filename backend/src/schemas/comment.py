@@ -13,6 +13,17 @@ class CommentBase(BaseModel):
     text: str = Field(..., description="Comment text")
 
 
+class CommentMentionResponse(BaseModel):
+    """An @mention in a comment that references a registered account."""
+    account_id: str = Field(..., description="ID of the referenced external account")
+    username: Optional[str] = Field(default=None, description="Username of the referenced account")
+    display_name: Optional[str] = Field(default=None, description="Display name of the referenced account")
+    platform: Optional[str] = Field(default=None, description="Platform of the referenced account")
+    profile_url: Optional[str] = Field(default=None, description="Profile URL of the referenced account")
+    cluster_id: Optional[str] = Field(default=None, description="Cluster ID of the referenced account")
+    mentioned_username: Optional[str] = Field(default=None, description="Handle as it appeared in the text")
+
+
 class CommentCreate(CommentBase):
     """Schema for creating a new comment."""
     original_author: Optional[str] = Field(default=None, description="Original author username")
@@ -48,6 +59,7 @@ class CommentResponse(BaseModel):
     user_id: Optional[int]
     status: str
     priority: str
+    vote_score: int = Field(default=0, description="Upvotes minus downvotes; below 0 means false flag")
     processed_at: Optional[datetime]
     processing_started_at: Optional[datetime]
     error_message: Optional[str]
@@ -57,7 +69,10 @@ class CommentResponse(BaseModel):
     
     # Classification results (if any)
     classifications: Optional[List[Dict[str, Any]]] = None
-    
+
+    # Accounts referenced via @mentions (registered on the same platform)
+    mentions: Optional[List[CommentMentionResponse]] = None
+
     class Config:
         from_attributes = True
 
@@ -71,12 +86,21 @@ class CommentListResponse(BaseModel):
     source_platform: Optional[str]
     status: str
     priority: str
+    vote_score: int = 0
     processed_at: Optional[datetime]
     created_at: datetime
     classifications: Optional[List[Dict[str, Any]]] = None
+    mentions: Optional[List[CommentMentionResponse]] = None
 
     class Config:
         from_attributes = True
+
+
+class CommentVoteResponse(BaseModel):
+    """Result of an upvote/downvote action on a comment."""
+    id: int
+    vote_score: int = Field(..., description="Upvotes minus downvotes after the vote")
+    false_flag: bool = Field(..., description="True when the comment is classified as a false flag")
 
 
 class CommentStatusResponse(BaseModel):

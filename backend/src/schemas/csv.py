@@ -12,6 +12,7 @@ class CSVUploadResponse(BaseModel):
     total_rows: int = Field(..., description="Total rows in CSV")
     valid_rows: int = Field(..., description="Valid rows processed")
     invalid_rows: int = Field(default=0, description="Invalid rows skipped")
+    duplicates_skipped: int = Field(default=0, description="Rows skipped because the comment already exists")
     processing: bool = Field(default=True, description="Whether processing is async")
     
     class Config:
