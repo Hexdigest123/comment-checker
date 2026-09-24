@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-from sqlalchemy import and_, asc, desc, select
+from sqlalchemy import and_, asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -75,6 +75,8 @@ lists where helpful). Do not dump raw JSON.
 - When you list comments, include for each one the comment_url (link to the \
 original comment) and the author when available, plus any other metadata the \
 user asks about (likes, dates, classification scores, ...).
+- The comment's date is posted_at (when it was written on the platform). \
+created_at is only when it was ingested; never present it as the comment date.
 - If a tool returns an error, say so plainly.
 - If the answer does not need data (small talk, general questions), just answer.
 - Format your replies using Markdown (headings, bullet lists, **bold**, \
@@ -133,6 +135,9 @@ def _comment_metadata(
         "status": getattr(comment.status, "value", comment.status),
         "priority": getattr(comment.priority, "value", comment.priority),
         "vote_score": comment.vote_score,
+        "posted_at": (
+            comment.posted_at.isoformat() if comment.posted_at else None
+        ),
         "created_at": (
             comment.created_at.isoformat() if comment.created_at else None
         ),
@@ -564,15 +569,20 @@ class AIAssistantService:
 
         limit = min(int(arguments.get("limit") or 20), 100)
 
+        # The comment's date is when it was written on the platform
+        # (posted_at, from the export), not when it was ingested;
+        # fall back to created_at for comments without an export date.
+        comment_date = func.coalesce(Comment.posted_at, Comment.created_at)
+
         conditions = []
         if self._scope_user_id is not None:
             conditions.append(Comment.user_id == self._scope_user_id)
         if comment_status is not None:
             conditions.append(Comment.status == comment_status)
         if date_start is not None:
-            conditions.append(Comment.created_at >= date_start)
+            conditions.append(comment_date >= date_start)
         if date_end is not None:
-            conditions.append(Comment.created_at <= date_end)
+            conditions.append(comment_date <= date_end)
 
         classification_conditions = []
         if category is not None:
@@ -594,7 +604,7 @@ class AIAssistantService:
         query = select(Comment)
         if conditions:
             query = query.where(and_(*conditions))
-        query = query.order_by(desc(Comment.created_at)).limit(limit)
+        query = query.order_by(desc(comment_date)).limit(limit)
 
         result = await self.db.execute(query)
         comments = result.scalars().all()

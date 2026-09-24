@@ -118,14 +118,17 @@ async def create_comment(
         platform=comment_data.get("platform"),
         platform_comment_id=comment_data.get("platform_comment_id"),
         original_author=comment_data.get("original_author"),
+        original_author_id=comment_data.get("original_author_id"),
+        original_author_url=comment_data.get("original_author_url"),
         source_platform=comment_data.get("source_platform"),
         source_url=comment_data.get("source_url"),
+        posted_at=comment_data.get("posted_at"),
         context=comment_data.get("context"),
         priority=priority,
         status=status,
         extra_metadata=comment_data.get("metadata", {}),
     )
-    
+
     db.add(comment)
     await db.commit()
     await db.refresh(comment)
@@ -185,8 +188,11 @@ async def create_comment_batch(
             platform=comment_data.get("platform"),
             platform_comment_id=comment_data.get("platform_comment_id"),
             original_author=comment_data.get("original_author"),
+            original_author_id=comment_data.get("original_author_id"),
+            original_author_url=comment_data.get("original_author_url"),
             source_platform=comment_data.get("source_platform"),
             source_url=comment_data.get("source_url"),
+            posted_at=comment_data.get("posted_at"),
             context=comment_data.get("context"),
             priority=priority,
             status=status,

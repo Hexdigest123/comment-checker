@@ -14,6 +14,7 @@ import csv
 import io
 import logging
 import re
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 import uuid
 
@@ -83,6 +84,26 @@ CSV_COLUMN_MAPPINGS = {
     # Priority
     "priority": "priority",
     "priorit\u00e4t": "priority",  # Handle German umlaut
+
+    # Date the comment was written on the platform (from the export)
+    "date": "posted_at",
+    "comment date": "posted_at",
+    "posted at": "posted_at",
+    "posted_at": "posted_at",
+    "published at": "posted_at",
+    "publication date": "posted_at",
+    "datum": "posted_at",
+
+    # Direct link to the comment itself (not the author profile)
+    "comment url": "comment_url",
+    "comment link": "comment_url",
+    "permalink": "comment_url",
+
+    # Platform identifier of the comment
+    "comment id": "platform_comment_id",
+
+    # Like count on the comment
+    "likes": "likes",
 }
 
 
@@ -209,6 +230,28 @@ def extract_url_platform(url: str) -> Tuple[Optional[str], Optional[str]]:
     return None, None
 
 
+def _parse_csv_datetime(value: str) -> Optional[datetime]:
+    """
+    Parse a CSV date/datetime value.
+
+    Handles ISO 8601 (as provided by exports) and a few common fallback
+    formats. Returns None when the value cannot be parsed.
+    """
+    value = value.strip()
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        pass
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d",
+                "%d.%m.%Y %H:%M", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    logger.warning("Could not parse CSV date value: %r", value)
+    return None
+
+
 def extract_comment_from_row(
     row: Dict[str, str],
     column_mapping: Dict[str, str],
@@ -261,11 +304,25 @@ def extract_comment_from_row(
                     extracted_display_name = value
                 elif model_field == "link":
                     extracted_link = value
-                    comment_data["source_url"] = value
+                    comment_data["original_author_url"] = value
                 elif model_field == "platform":
                     extracted_platform = value.lower()
                 elif model_field == "platform_user_id":
                     extracted_platform_user_id = value
+                    comment_data["original_author_id"] = value
+                elif model_field == "comment_url":
+                    comment_data["source_url"] = value
+                elif model_field == "platform_comment_id":
+                    comment_data["platform_comment_id"] = value
+                elif model_field == "posted_at":
+                    parsed_date = _parse_csv_datetime(value)
+                    if parsed_date:
+                        comment_data["posted_at"] = parsed_date
+                elif model_field == "likes":
+                    try:
+                        comment_data["metadata"]["likes"] = int(value)
+                    except ValueError:
+                        logger.warning("Could not parse CSV likes value: %r", value)
                 elif model_field == "context":
                     comment_data["context"] = value
                 elif model_field == "priority":
@@ -279,6 +336,22 @@ def extract_comment_from_row(
                         "niedrig": "low",
                     }
                     comment_data["priority"] = priority_map.get(value.lower(), "medium")
+
+    # Files without a dedicated comment link keep the previous behaviour of
+    # treating the author/profile link as the source URL
+    if not comment_data.get("source_url") and extracted_link:
+        comment_data["source_url"] = extracted_link
+
+    # Preserve columns the mapping does not know (analyst assessments,
+    # evaluation fields, thumbnails, ...) so no export data is lost
+    source_columns = {
+        csv_col: row[csv_col].strip()
+        for csv_col in row
+        if csv_col and csv_col not in column_mapping
+        and row.get(csv_col) and row[csv_col].strip()
+    }
+    if source_columns:
+        comment_data["metadata"]["source_columns"] = source_columns
 
     # Fall back to the context supplied at upload time when the row has none
     if not comment_data.get("context") and default_context:

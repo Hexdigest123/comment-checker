@@ -64,6 +64,10 @@ class Comment(Base):
     source_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     source_platform: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
+    # Date the comment was written on the source platform (from the export);
+    # distinct from created_at, which is when the record was ingested
+    posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # Context (for classification)
     context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
