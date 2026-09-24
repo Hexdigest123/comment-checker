@@ -60,12 +60,17 @@ export function usePaginatedResource<T>(
   const [error, setError] = useState('');
   const [tick, setTick] = useState(0);
 
+  // Once the first fetch has completed, later fetches (polling ticks,
+  // refetch() after votes, page/sort/filter changes) update silently so
+  // the table does not flash a loading state on every refresh.
+  const hasLoadedRef = useRef(false);
+
   const searchRef = useRef(search);
   searchRef.current = search;
 
   const fetchAll = useCallback(async () => {
     if (!enabled) return;
-    setIsLoading(true);
+    if (!hasLoadedRef.current) setIsLoading(true);
     setError('');
     try {
       const params: Record<string, string | number> = {
@@ -85,6 +90,7 @@ export function usePaginatedResource<T>(
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
+      hasLoadedRef.current = true;
       setIsLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

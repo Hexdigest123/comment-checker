@@ -72,6 +72,9 @@ Guidelines:
 - Prefer tools over guessing; never invent data.
 - After a tool call, summarize the result in natural language (short sentences, \
 lists where helpful). Do not dump raw JSON.
+- When you list comments, include for each one the comment_url (link to the \
+original comment) and the author when available, plus any other metadata the \
+user asks about (likes, dates, classification scores, ...).
 - If a tool returns an error, say so plainly.
 - If the answer does not need data (small talk, general questions), just answer.
 - Format your replies using Markdown (headings, bullet lists, **bold**, \
@@ -91,6 +94,51 @@ def _parse_enum_argument(
     except ValueError:
         valid = ", ".join(member.value for member in enum_cls)
         return None, {"error": f"Invalid {label} '{value}'. Valid values: {valid}"}
+
+
+def _classification_metadata(
+    classification: Classification | None,
+) -> dict[str, Any] | None:
+    """Serialize a classification with all stored fields."""
+    if classification is None:
+        return None
+    return {
+        "backend": getattr(classification.backend, "value", classification.backend),
+        "category": getattr(classification.category, "value", classification.category),
+        "severity": getattr(classification.severity, "value", classification.severity),
+        "confidence": classification.confidence,
+        "harmful_score": classification.harmful_score,
+        "created_at": (
+            classification.created_at.isoformat()
+            if classification.created_at
+            else None
+        ),
+    }
+
+
+def _comment_metadata(
+    comment: Comment, classification: Classification | None = None
+) -> dict[str, Any]:
+    """Serialize a comment with all stored metadata, plus its classification."""
+    return {
+        "id": comment.id,
+        "text": comment.text,
+        "author": comment.original_author,
+        "author_id": comment.original_author_id,
+        "author_profile_url": comment.original_author_url,
+        "comment_url": comment.source_url,
+        "platform": comment.source_platform,
+        "platform_comment_id": comment.platform_comment_id,
+        "context": comment.context,
+        "status": getattr(comment.status, "value", comment.status),
+        "priority": getattr(comment.priority, "value", comment.priority),
+        "vote_score": comment.vote_score,
+        "created_at": (
+            comment.created_at.isoformat() if comment.created_at else None
+        ),
+        "metadata": comment.extra_metadata or None,
+        "classification": _classification_metadata(classification),
+    }
 
 
 def _parse_filter_date(value: Any, end_of_day: bool) -> datetime | None:
@@ -551,46 +599,30 @@ class AIAssistantService:
         result = await self.db.execute(query)
         comments = result.scalars().all()
 
-        # Attach the classification row that matched the filters (most harmful first)
+        # Attach the most harmful classification per comment; when
+        # classification filters were applied, only those rows are considered
+        # so the attached row always matches the filters.
         classifications_by_comment: dict[int, Classification] = {}
-        if classification_conditions and comments:
-            class_result = await self.db.execute(
-                select(Classification)
-                .where(
-                    Classification.comment_id.in_([c.id for c in comments]),
-                    and_(*classification_conditions),
+        if comments:
+            classification_query = select(Classification).where(
+                Classification.comment_id.in_([c.id for c in comments])
+            )
+            if classification_conditions:
+                classification_query = classification_query.where(
+                    and_(*classification_conditions)
                 )
-                .order_by(desc(Classification.harmful_score))
+            class_result = await self.db.execute(
+                classification_query.order_by(desc(Classification.harmful_score))
             )
             for classification in class_result.scalars():
                 classifications_by_comment.setdefault(
                     classification.comment_id, classification
                 )
 
-        items = []
-        for comment in comments:
-            classification = classifications_by_comment.get(comment.id)
-            items.append(
-                {
-                    "id": comment.id,
-                    "text": comment.text,
-                    "author": comment.original_author,
-                    "platform": comment.source_platform,
-                    "status": getattr(comment.status, "value", comment.status),
-                    "created_at": (
-                        comment.created_at.isoformat() if comment.created_at else None
-                    ),
-                    "classification": (
-                        {
-                            "category": getattr(classification.category, "value", classification.category),
-                            "severity": getattr(classification.severity, "value", classification.severity),
-                            "harmful_score": classification.harmful_score,
-                        }
-                        if classification
-                        else None
-                    ),
-                }
-            )
+        items = [
+            _comment_metadata(comment, classifications_by_comment.get(comment.id))
+            for comment in comments
+        ]
 
         applied = {
             key: getattr(value, "value", value)
@@ -617,21 +649,38 @@ class AIAssistantService:
         results = await self.embedding_service.semantic_search(
             query, limit=limit, user_id=self._scope_user_id
         )
+        classifications_by_comment = await self._top_classifications_by_comment(
+            [comment.id for comment, _ in results]
+        )
         return {
             "query": query,
             "total": len(results),
             "results": [
                 {
-                    "id": comment.id,
-                    "text": comment.text,
-                    "author": comment.original_author,
-                    "platform": comment.source_platform,
-                    "status": getattr(comment.status, "value", comment.status),
+                    **_comment_metadata(
+                        comment, classifications_by_comment.get(comment.id)
+                    ),
                     "similarity": round(score, 4),
                 }
                 for comment, score in results
             ],
         }
+
+    async def _top_classifications_by_comment(
+        self, comment_ids: list[int]
+    ) -> dict[int, Classification]:
+        """Return the most harmful classification per comment id."""
+        if not comment_ids:
+            return {}
+        result = await self.db.execute(
+            select(Classification)
+            .where(Classification.comment_id.in_(comment_ids))
+            .order_by(desc(Classification.harmful_score))
+        )
+        top: dict[int, Classification] = {}
+        for classification in result.scalars():
+            top.setdefault(classification.comment_id, classification)
+        return top
 
     async def _tool_classify_text(
         self, arguments: dict[str, Any]

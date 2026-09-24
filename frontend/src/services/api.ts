@@ -100,11 +100,11 @@ export const commentApi = {
     account_id?: string;
     cluster_id?: string;
   }) =>
-    api.get('/comments', { params }),
+    api.get('/comments/', { params }),
 
   get: (id: string) => api.get(`/comments/${id}`),
 
-  create: (data: unknown) => api.post('/comments', data),
+  create: (data: unknown) => api.post('/comments/', data),
 
   update: (id: string, data: unknown) => api.put(`/comments/${id}`, data),
 
@@ -133,7 +133,7 @@ export const commentApi = {
 // Classification API
 export const classificationApi = {
   list: (params?: { page?: number; page_size?: number; comment_id?: string; backend?: string; category?: string }) =>
-    api.get('/classifications', { params }),
+    api.get('/classifications/', { params }),
 
   get: (id: string) => api.get(`/classifications/${id}`),
 
@@ -147,7 +147,7 @@ export const clusterApi = {
   clusterGraph: (clusterId: string, params?: { include_comments?: boolean }) =>
     api.get<GraphData>(`/clusters/${clusterId}/graph`, { params }),
 
-  list: (params?: Record<string, string | number>) => api.get('/clusters', { params }),
+  list: (params?: Record<string, string | number>) => api.get('/clusters/', { params }),
 };
 
 // AI assistant API (agentic workflow — tools are always enabled)
